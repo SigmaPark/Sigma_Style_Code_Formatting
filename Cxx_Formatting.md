@@ -86,13 +86,130 @@ template<
 void foo(T t, U u);
 ```
 
+## Virtual Brackets
+
+가상 괄호(virtual brackets)는 실제 코드에는 보이지 않고 자리도 차지하지 않지만, 위에서 언급한 괄호 규칙이 동일하게 적용되는 괄호다(단, 일반 괄호들과 달리 글자 수에 포함하지 않는다). 가상 괄호는 특정 구문에서 특정 키워드 다음에만 발생할 수 있고 그 키워드들을 가상 괄호 키워드(virtual bracket keyword)라고 한다. 가상 괄호가 발생할 수 있는 구문과 그 그 키워드는 다음과 같다.(구문 / "키워드")
+
+- 반환문 / "return"
+- 예외 반환문 / "throw"
+- 타입 별칭 선언문, 이름공간 using 선언문 / "using"
+- 변수 선언문 / "[변수의 타입명(타입 한정사까지 포함)]"
+
+그리고 위 구문의 종료를 알리는 세미콜론을 가상 괄호 종료 세미콜론이라 하고 이 세미콜론 바로 직전에 닫는 가상 괄호가 배치된다.
+
+단, 가상 괄호의 여는 괄호와 닫는 괄호는 반드시 다른 줄에 배치되어야만 한다. 즉, 가상 괄호 키워드와 가상 괄호 종료 세미콜론이 같은 줄에 있는 경우 가상 괄호를 적용하지 않는다.  
+
+개념 설명 및 시각화를 위해 가상 괄호를 『 』로 표기하면 다음과 같다.  
+
+### 변수 선언문
+
+```C++
+	/*
+		double const『
+			b = 10*a + 0.23,
+			c = b/4,
+			*p = &b,
+			*const cp = p
+		』;
+	*/
+	double const
+		b = 10*a + 0.23,
+		c = b/4,
+		*p = &b,
+		*const cp = p
+	;
+
+	/*
+		auto const『
+			swap_f
+			= [](int &a, int &b) noexcept{
+				int temp = a;
+
+				a = b;
+				b = temp;
+			}
+		』;
+	*/
+	auto const
+		swap_f
+		= [](int &a, int &b) noexcept{
+			int temp = a;
+
+			a = b;
+			b = temp;
+		}
+	;
+```
+
+### using 을 이용한 구문
+```C++
+	/*
+		using『
+			complicated_t
+			= std::tuple<
+				std::vector<int>, std::list<double>,
+				std::map<
+					foo_enum_t,
+					std::pair<std::string, port_t const *>
+				>
+			>
+		』;
+	*/
+	using
+		complicated_t
+		= std::tuple<
+			std::vector<int>, std::list<double>,
+			std::map<
+				foo_enum_t,
+				std::pair<std::string, port_t const *>
+			>
+		>
+	;
+
+	/*
+		using『
+			std::cout, std::endl, std::cerr,
+			std::wcout, std::wcerr
+		』;
+	*/
+	using
+		std::cout, std::endl, std::cerr,
+		std::wcout, std::wcerr
+	;
+```
+
+### return과 throw 구문
+```C++
+	if(condition){
+		/*
+			throw『
+				std::runtime_error(
+					"a runtime error occurs."
+				)
+			』;
+		*/
+		throw
+			std::runtime_error(
+				"a runtime error occurs."
+			)
+		;
+	}
+
+	/*
+		return『
+			std::tuple<int, double, Foo *>{
+				3, 0.14, &foo
+			}
+		』;	
+	*/
+	return
+		std::tuple<int, double, Foo *>{
+			3, 0.14, &foo
+		}
+	;
+```
 
 # 작성 중 혹은 예정
-
-## Virtual Brackets Rules
-
-코드에는 보이지 않지만 마치 보이지도, 자리를 차지하지도 않는 가상의 괄호가 있다고 가정하여 위에서 언급한 괄호 규칙을 동일하게 적용하도록 한다. 개념 설명 및 예시코드를 위해 여기서는 그 가상 괄호를 『 』로 표기하도록 한다.
-
 
 ## Special Charactors
 ### Spacing between Operator and Operands
