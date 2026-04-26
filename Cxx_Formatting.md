@@ -89,6 +89,11 @@ void foo(T t, U u);
 
 # 작성 중 혹은 예정
 
+## Virtual Brackets Rules
+
+코드에는 보이지 않지만 마치 보이지도, 자리를 차지하지도 않는 가상의 괄호가 있다고 가정하여 위에서 언급한 괄호 규칙을 동일하게 적용하도록 한다. 개념 설명 및 예시코드를 위해 여기서는 그 가상 괄호를 『 』로 표기하도록 한다.
+
+
 ## Special Charactors
 ### Spacing between Operator and Operands
 - 단항연산자로 해석되는 특수문자는 그 피연산항과 개행이나 공백 없이 붙여 쓴다.
