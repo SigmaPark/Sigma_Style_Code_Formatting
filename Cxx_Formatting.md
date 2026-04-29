@@ -326,3 +326,32 @@ Wrong::Wrong(int x, int y) : _a(x)
 , _b(y){} 
 ```
 
+### Inheritance List
+
+- 클래스 또는 구조체 선언 시 베이스 클래스들을 명시하는 리스트(base-clause)의 도입에 사용하는 콜론 `:` 과 베이스 명세 사이의 콤마 `,` 는 모두 이항연산자가 아니지만 이항연산자와 동일한 개행 규칙을 적용한다.
+
+- 클래스 선언부 전체(`class`/`struct` 키워드부터 본체 시작 중괄호 직전까지)가 개행 없이 한 줄로 표현할 수 있을 정도로 짧을 경우는 한 줄에 쓸 수 있다. 개행을 해야 한다면 상속 리스트의 마지막 베이스 명세 후 개행을 하고 클래스 본체를 시작하는 중괄호의 시작은 다음 줄의 맨 처음에 위치시킨다. 즉 상속 리스트를 동반한 클래스 선언부에서 개행시 마지막 베이스 명세 직후 위치가 가장 높은 우선순위를 가진다.
+
+```C++
+struct Bar : public A, public B{}; // OK, No line break
+
+
+class Foo
+: public Some_Base_A, public Some_Base_B
+, public Templated_Base<
+	Template_Param1, Template_Param2
+>
+, public Final_Base // line break after final base specifier
+{
+	...
+};
+
+/*
+	Violated. Line break after final base specifier should be considered as top priority.
+*/
+class Wrong : public A
+, public B{
+	...
+};
+```
+
