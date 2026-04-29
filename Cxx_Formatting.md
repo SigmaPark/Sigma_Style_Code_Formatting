@@ -269,14 +269,13 @@ std::lock_guard<std::mutex>{mtx}
 
 ### Declarations
 
-- 선언문 전체(타입부터 종료 세미콜론까지)가 두 줄 이상을 차지한다면 위에서 언급한 가상 괄호 규칙을 먼저 적용한다. 그리고 그 가상 괄호 내 스코프 안에서는 기본적으로 앞서 언급한 expressions 규칙을 적용한다.   
+- 선언문 전체(타입부터 종료 세미콜론까지)가 두 줄 이상을 차지한다면 위에서 언급한 가상 괄호 규칙을 먼저 적용한다. 그리고 그 가상 괄호 내 스코프 안에서는 기본적으로 앞서 언급한 표현식(expressions) 규칙을 적용한다.   
 
 - 타입 선언 후 여러개의 변수들을 선언할 때 구분자로 사용하는 콤마 `,`는 이항연산자가 아니므로 위에서 언급한대로 해당 줄의 맨 마지막에 놓이도록 콤마의 바로 다음에 개행이 이루어진다.
 
 - 변수를 선언할 때 초기화자로 사용하는 `=` 는 연산자는 아니지만 이항연산자와 동일한 개행 규칙을 적용한다. 단, 초기화자 `=` 가 포함된 `var = expression` 형태의 선언문에서 개행을 해야 한다면 반드시 초기화자 `=` 앞의 `var` 직후에 개행을 우선적으로 해야만 한다. 즉, 초기화자를 포함한 선언문의 개행시 초기화자가 가장 높은 개행의 우선순위를 가진다.
 
 ```C++
-
 double const
 	var0 = x1 + x2, // OK, No line break
 	var1
@@ -288,6 +287,42 @@ double const
 
 int const
 	violated = x1 - x2
-	+ x3 // Violated. initializer "=" should 1st priority for line breaking.
+	+ x3 // Violated. initializer "=" should have top priority for line breaking.
 ;
 ```
+
+### Member Initializer List 
+
+- 생성자에서 멤버변수를 초기화하는 리스트에 사용하는 콜론 `:` 과 멤버 초기화 구문간에 들어가는 콤마 `,` 는 모두 이항연산자가 아니지만 이항연산자와 동일한 개행 규칙을 적용한다.
+
+- 생성자 전체(생성자부터 멤버초기화, 그리고 구현부까지)가 개행 없이 한 줄로 표현할 수 있을 정도로 짧을 경우는 한 줄에 쓸 수 있다. 개행을 해야한다면 초기화 리스트의 마지막 멤버 초기화 후 개행을 하고 생성자의 구현부를 시작하는 중괄호의 시작은 다음 줄의 맨 처음에 위치시킨다. 즉 멤버 초기화 리스트를 동반한 생성자 구현부에서 개행시 마지막 멤버 초기화 구문 직후 위치가 가장 높은 우선순위를 가진다.
+
+```C++
+Bar::Bar(int x, int y) : _mem_x(x), _mem_y(y){} // OK, No line break
+
+
+Foo::Foo(int x, int y)
+: _mem1(x), _mem2(y)
+, _mem3(_init3())
+, _mem_var(
+	[x]{
+		auto res = x+1;
+
+		...
+
+		return res;
+	}
+	()
+)
+, _final_mem_var(0) // line break after final member initialization
+{
+	...
+}
+
+/*
+	Violated. Line break after final member initialization should be considered as top priority.
+*/
+Wrong::Wrong(int x, int y) : _a(x)
+, _b(y){} 
+```
+
