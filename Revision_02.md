@@ -135,8 +135,8 @@ std::cout
 
 x
 = (
-        -b
-        + std::sqrt( std::pow(b, 2) - 4*a*c )
+	-b
+	+ std::sqrt( std::pow(b, 2) - 4*a*c )
 )
 / (2*a);
 ```
@@ -156,11 +156,11 @@ result1
 result2
 = some_long_condition_expression_blah
 ? func_call_returning_value(
-        argument1, argument2
+	argument1, argument2
 )
 : (
-        another_branch_value
-        + supplementary_term_blah_blah
+	another_branch_value
+	+ supplementary_term_blah_blah
 );
 ```
 
@@ -168,8 +168,8 @@ result2
 콤마 `,`는 앞쪽 공백 없이 붙여 쓰고, 개행 시 콤마 직후에 개행한다(콤마가 줄의 마지막에 위치). 이는 구분자든 콤마 연산자든 동일하다.
 ```C++
 func(
-        a, b,
-        d, e
+	a, b,
+	d, e
 );
 ```
 
@@ -233,14 +233,14 @@ double d[3] = {0.0, 1.0, 2.0};
 
 ```C++
 Bar_blah_blah_blah(
-        item1_blah, item2_blah,
-        item3_blah_blah_blah,
-        item4_blah_blah_blah_blah
+	item1_blah, item2_blah,
+	item3_blah_blah_blah,
+	item4_blah_blah_blah_blah
 );
 
 struct Object1{
-        Object1();
-        void calc();
+	Object1();
+	void calc();
 };
 ```
 
@@ -254,15 +254,15 @@ struct Object1{
 // 그 앞 "+"의 공백에서 멈춤 → 다중행 괄호는 "+"보다 낮은 우선순위
 a + b
 + ns::obj.method(
-        blah, blah2,
-        something, param
+	blah, blah2,
+	something, param
 );
 
 // "=="가 최우선 개행. 여는 "(" 앞 토큰은 "-" → "-"가 먼저 개행되고 다중행 괄호 전개
 a*x + b
 == 2 * m
 - (
-        value1 * value2 - func(0)
+	value1 * value2 - func(0)
 );
 
 // chunk 규칙: "(" 앞을 역진할 때 단일행 괄호 chunk "(a, b, c)" 내부의
@@ -270,8 +270,8 @@ a*x + b
 // 다중행 괄호는 "="보다 낮은 우선순위
 result
 = transform_blah_blah_blah(a, b, c)(
-        argument1, argument2,
-        argument3
+	argument1, argument2,
+	argument3
 );
 ```
 
@@ -295,51 +295,51 @@ result
 
 #### 변수 선언문
 ```C++
-        /*
-                double const『
-                        b = 10*a + 0.23,
-                        c = b/4,
-                        *p = &b,
-                        *const cp = p
-                』;
-        */
-        double const
-                b = 10*a + 0.23,
-                c = b/4,
-                *p = &b,
-                *const cp = p
-        ;
+/*
+	double const『
+		b = 10*a + 0.23,
+		c = b/4,
+		*p = &b,
+		*const cp = p
+	』;
+*/
+double const
+	b = 10*a + 0.23,
+	c = b/4,
+	*p = &b,
+	*const cp = p
+;
 ```
 
 #### using 구문
 ```C++
-        using
-                complicated_t
-                = std::tuple<
-                        std::vector<int>, std::list<double>,
-                        std::map<
-                                foo_enum_t,
-                                std::pair<std::string, port_t const *>
-                        >
-                >
-        ;
+using
+	complicated_t
+	= std::tuple<
+		std::vector<int>, std::list<double>,
+		std::map<
+			foo_enum_t,
+			std::pair<std::string, port_t const *>
+		>
+	>
+;
 ```
 
 #### return / throw 구문
 ```C++
-        if(condition){
-                throw
-                        std::runtime_error(
-                                "a runtime error occurs."
-                        )
-                ;
-        }
+if(condition){
+	throw
+		std::runtime_error(
+			"a runtime error occurs."
+		)
+	;
+}
 
-        return
-                std::tuple<int, double, Foo *>{
-                        3, 0.14, &foo
-                }
-        ;
+return
+	std::tuple<int, double, Foo *>{
+		3, 0.14, &foo
+	}
+;
 ```
 
 #### 생성자 멤버초기화 리스트 (`:` → `{`)
@@ -348,10 +348,10 @@ ctor::ctor(int x, int y) : _mem_x(x), _mem_y(y){}  // 한 줄이면 가상 괄�
 
 ctor::ctor(...)
 : 『
-        mem1(...),
-        mem2(...)
+	mem1(...),
+	mem2(...)
 』{
-        ...
+	...
 }
 ```
 
@@ -361,14 +361,14 @@ struct Bar : public A, public B{};  // 한 줄이면 가상 괄호 미적용
 
 class Foo
 : 『
-        public Some_Base_A,
-        public Some_Base_B,
-        public Templated_Base<
-                Template_Param1, Template_Param2
-        >,
-        public Final_Base
+	public Some_Base_A,
+	public Some_Base_B,
+	public Templated_Base<
+		Template_Param1, Template_Param2
+	>,
+	public Final_Base
 』{
-        ...
+	...
 };
 ```
 
@@ -377,22 +377,22 @@ class Foo
 // 정의 — 닫는 키워드 "{"
 auto func(...)
 -> 『
-        std::tuple<
-                type1_t, type2_t,
-                std::pair< int, std::list<std::string> >,
-                Foo const volatile *
-        >
+	std::tuple<
+		type1_t, type2_t,
+		std::pair< int, std::list<std::string> >,
+		Foo const volatile *
+	>
 』{
-        ...
+	...
 }
 
 // 선언 — 닫는 키워드 ";"
 auto func(...)
 -> 『
-        std::tuple<
-                type1_t, type2_t,
-                Foo const volatile *
-        >
+	std::tuple<
+		type1_t, type2_t,
+		Foo const volatile *
+	>
 』;
 ```
 
@@ -400,26 +400,26 @@ auto func(...)
 ```C++
 // 캡처가 다중행이 되는 경우 (닫는 "]" 줄에 새 여는 괄호를 잇거나, 개행 후 새로 시작)
 auto『
-        f
-        = [
-                &cap1, &cap2
-        ](
-                int really_long_param1,
-                int really_long_param2
-        ){
-                return cap1 + really_long_param1;
-        }
+	f
+	= [
+		&cap1, &cap2
+	](
+		int really_long_param1,
+		int really_long_param2
+	){
+		return cap1 + really_long_param1;
+	}
 』;
 
 // 후행반환 가상 괄호가 변수 선언 가상 괄호 안에 중첩
 auto『
-        f
-        = [](int x)
-        -> 『
-                std::vector<int>
-        』{
-                return{x, x};
-        }
+	f
+	= [](int x)
+	-> 『
+		std::vector<int>
+	』{
+		return{x, x};
+	}
 』;
 ```
 
