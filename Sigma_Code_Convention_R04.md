@@ -340,7 +340,7 @@ obj.query_blah_blah_blah(
 return value;      // = return『value』; — 여는 키워드 "return" 다음에 공백 한 칸
 int const &a = x;  // = [int const]『&a = x』; — 타입명과 "&a" 사이 공백 유지("int const&a" 방지)
 throw err;         // = throw『err』;
-return;            // 내용이 없으므로 가상 괄호 미적용
+return;            // 내용이 없으므로 여는 키워드 후 공백 없음
 auto f()->int;     // "->"는 양쪽 붙임(§5)이 우선 → 공백을 추가하지 않는다("->int")
 class A : b, c{};  // = class A :『b, c』{}; — ":"는 양쪽 띄움이라 ": " 유지, "," 둘은 격리
 ```
