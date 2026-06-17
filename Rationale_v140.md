@@ -1,6 +1,6 @@
 # Sigma 코드 서식 규약 — 설계 해설 (Rationale) — Revision 04
 
-본 문서는 [Sigma_Code_Convention_R04.md](Sigma_Code_Convention_R04.md)의 각 규칙이 "왜" 그런 형태를 갖는지를 설명한다. 규칙 자체는 규약 문서를, 미결정 사항은 [Todo_R04.md](Todo_R04.md)를 참조한다.
+본 문서는 [Sigma_Coding_Convention_v140.md](Sigma_Coding_Convention_v140.md)의 각 규칙이 "왜" 그런 형태를 갖는지를 설명한다. 규칙 자체는 규약 문서를 참조한다.
 
 ---
 

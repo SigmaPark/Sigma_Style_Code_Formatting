@@ -1,6 +1,6 @@
 # Sigma 코드 서식 규약 (C++ / CUDA) — Revision 04
 
-본 문서는 C++ 및 CUDA 소스 코드의 서식 규약을 정의한다. 설계 의도와 해설은 [Rationale_R04.md](Rationale_R04.md), 미결정 사항은 [Todo_R04.md](Todo_R04.md)를 참조한다.
+본 문서는 C++ 및 CUDA 소스 코드의 서식 규약을 정의한다. 설계 의도와 해설은 [Rationale_v140.md](Rationale_v140.md)를 참조한다.
 
 
 ---
