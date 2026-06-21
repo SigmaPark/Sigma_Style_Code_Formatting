@@ -1,3 +1,7 @@
+<!-- SPDX-FileCopyrightText: (c) 2026 Jin-Eon Park <greengb@naver.com> <sigma@gm.gist.ac.kr>
+     SPDX-License-Identifier: MIT License
+-->
+
 # Sigma 코드 서식 규약 (C++ / CUDA) — Version 2.00
 
 본 문서는 C++ 및 CUDA 소스 코드의 서식 규약을 정의한다. 설계 의도와 해설(Rationale)은 별도 문서로 다룬다.
@@ -607,3 +611,11 @@ public:
 	static auto is_valid(float val)->bool;
 };
 ```
+
+---
+
+## License
+
+Copyright (c) 2026 Jin-Eon Park &lt;greengb@naver.com&gt; &lt;sigma@gm.gist.ac.kr&gt;
+
+본 문서는 [MIT License](https://opensource.org/licenses/MIT) 하에 배포된다.
