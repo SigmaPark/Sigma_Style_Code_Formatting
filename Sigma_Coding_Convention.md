@@ -30,7 +30,8 @@
 
 - **제어문 중괄호 생략 금지** — 본체에 중괄호를 생략할 수 있는 모든 제어문에서 중괄호 생략을 금지한다. 해당하는 구문은 선택문 `if` / `else` / `switch` 와 반복문 `for`(범위 기반 포함) / `while` / `do`–`while` 이다.
 - **typedef 금지** — 타입 별칭은 `using` 선언으로만 작성하며 `typedef` 키워드 사용을 금지한다. 무명 타입을 정의하며 동시에 이름을 부여하던 `typedef` 관용구(`typedef struct{ ... } S;`)는 명명 정의(`struct S{ ... };`)로 환원한다.
-- **키워드 위치** — `const`와 `volatile`은 항상 수식할 대상의 뒤에 위치하고, `static`과 `inline`은 수식할 대상의 앞쪽에 위치한다.
+- **키워드 위치** — `const`·`volatile`·`constexpr`은 항상 수식할 대상의 뒤에 위치하고, `static`과 `inline`은 수식할 대상의 앞쪽에 위치한다.
+- **후행 반환 타입** — 반환 타입이 `void`인 경우를 제외하고, 함수의 반환 타입은 반드시 후행 반환(trailing return) 형식으로 작성한다.
 - **단항 연산자 병기** — 둘 이상의 단항연산자 사이에 공백을 넣지 않으면 의미가 다르게 해석되는 경우, 반드시 공백이 아닌 괄호로 구분한다. (이중 부정은 `- -x`가 아니라 `-(-x)`로. `*--this`처럼 공백 유무가 의미를 바꾸지 않으면 그대로 둔다.)
 
 ---
@@ -575,4 +576,34 @@ namespace app{
 		finish();
 	}
 }
+```
+
+---
+
+## 10. 스타일
+
+### 10.1 네이밍
+- 클래스의 멤버 함수·변수 중 **public이 아닌** 것은 이름 앞에 언더바 `_`를 붙인다.
+- **static** 함수·변수는 **대문자**로 시작하고, 클래스의 **비static** 멤버 함수·변수는 **소문자**로 시작한다.
+- 단, 시작 글자가 대문자 `I`가 되는 경우에는 소문자 `i`로 대신한다. 대문자 `I`는 금지한다.
+
+```C++
+class Foo{
+public:
+	Foo(std::string);
+	void bar(int);
+	auto bar2(double, double) const->std::string;
+	static auto Lon(double, double const *)->std::vector<double>;
+	static std::size_t constexpr Static_value = 10;
+protected:
+	int _var1;
+	void _func1();
+private:
+	int _var2;
+	auto _func2(int)->std::string;
+public:
+	double const &var;
+	// 대문자 I 예외 규칙
+	static auto is_valid(float val)->bool;
+};
 ```
