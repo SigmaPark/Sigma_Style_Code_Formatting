@@ -300,7 +300,7 @@ auto『
 	->『
 		std::vector<int>
 	』{
-		return{x, x};
+		return{ x, x };
 	}
 』;
 ```
