@@ -1,5 +1,5 @@
 <!-- SPDX-FileCopyrightText: (c) 2026 Jin-Eon Park <greengb@naver.com> <sigma@gm.gist.ac.kr>
-     SPDX-License-Identifier: MIT License
+     SPDX-License-Identifier: MIT
 -->
 
 # Sigma 코드 서식 규약 (C++ / CUDA) — Version 2.00
