@@ -10,7 +10,7 @@ cmake ..
 cmake --build .
 cd ..
 
-# === run sak on app/ ===
+# === self-check: run sak on app/ recursively ===
 echo
-echo "=== sak app ==="
-./build/sak app
+echo "=== sak -r app ==="
+./build/sak -r app

@@ -10,11 +10,10 @@ cmake --build .
 if errorlevel 1 ( cd .. & exit /b 1 )
 cd ..
 
-rem === run sak on app/ ===
+rem === self-check: run sak on app/ recursively ===
 echo.
-echo === sak app ===
-build\sak.exe app
+echo === sak -r app ===
+build\sak.exe -r app
 
 endlocal
-
 pause

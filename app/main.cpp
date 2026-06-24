@@ -4,15 +4,38 @@
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 #include <cctype>
+#include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <system_error>
 #include <vector>
 #include <list>
 
+#include "lexer.hpp"
+#include "check.hpp"
+
 namespace fs = std::filesystem;
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
+// 파일을 행 단위로 읽는다(말미의 '\r' 는 제거).
+static auto Read_lines(std::string const &path)->Lines{
+	Lines lines;
+
+	std::ifstream in(path);
+	std::string line;
+
+	while( std::getline(in, line) ){
+		if(!line.empty() && line.back() == '\r'){
+			line.pop_back();
+		}
+
+		lines.push_back(line);
+	}
+
+	return lines;
+}
 
 // 검사 대상 확장자(.cpp .hpp .cu .cuh .h)를 가진 일반 파일인지 판별한다.
 static auto is_target_source(fs::path const &p)->bool{
@@ -29,40 +52,27 @@ static auto is_target_source(fs::path const &p)->bool{
 	return ext == ".cpp" || ext == ".hpp" || ext == ".cu" || ext == ".cuh" || ext == ".h";
 }
 
-// 끝에 '/'가 정확히 하나 오도록 정규화한다("app" 또는 "app\" -> "app/").
-static auto With_trailing_slash(std::string s)->std::string{
-	while( !s.empty() && (s.back() == '/' || s.back() == '\\') ){
-		s.pop_back();
-	}
-
-	s += "/";
-	
-	return s;
-}
-
-// dir 아래의 대상 소스를 모은다. recursive면 하위 디렉터리까지 훑고
-// dir 기준 상대경로를, 아니면 파일명만 담는다. 출력은 사전식으로 정렬한다.
+// dir 아래의 대상 소스 경로(검사용 전체 경로)를 모은다. recursive면 하위까지.
+// 출력은 사전식 정렬.
 static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<std::string>{
 	std::list<std::string> out;
-	
+
 	if(recur){
 		fs::recursive_directory_iterator const end;
 		std::error_code ec;
 
 		for( fs::recursive_directory_iterator it(dir, ec); it != end; ++it ){
 			if( ::is_target_source(it->path()) ){
-				fs::path const rel = fs::relative(it->path(), dir, ec);
-
-				out.emplace_back(rel.generic_string());
+				out.emplace_back(it->path().generic_string());
 			}
 		}
 	} else{
 		fs::directory_iterator const end;
 		std::error_code ec;
-		
+
 		for( fs::directory_iterator it(dir, ec); it != end; ++it ){
 			if( ::is_target_source(it->path()) ){
-				out.emplace_back(it->path().filename().generic_string());
+				out.emplace_back(it->path().generic_string());
 			}
 		}
 	}
@@ -70,6 +80,21 @@ static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<st
 	out.sort();
 
 	return out;
+}
+
+// 한 파일을 검사해 위반을 출력하고, 위반 개수를 돌려준다.
+static auto Check_file(std::string const &path)->std::size_t{
+	Lines const lines = ::Read_lines(path);
+	Seg_lines const segs = ::scan_lines(lines);
+	std::vector<Violation> const violations = ::check_lines(lines, segs);
+
+	for(Violation const &v : violations){
+		std::cout
+		<< path << ":" << v.row + 1 << ":" << v.col + 1
+		<< " [" << v.rule << "] " << v.message << "\n";
+	}
+
+	return violations.size();
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
@@ -118,21 +143,20 @@ auto main(int const argc, char const * const *argv)->int{
 			return 2;
 		}
 
-		std::cout << "Hello " << target << "\n";
-		
-		return 0;
+		return ::Check_file(target) == 0 ? 0 : 1;
 	}
 
 	if( std::error_code ec; fs::is_directory(path, ec) ){
-		std::cout << "Hello " << ::With_trailing_slash(target) << "\n";
-
-		auto const files = ::Collect_sources(path, recur);
-
-		for(std::string const &f : files){
-			std::cout << f << "\n";
+		std::size_t total = 0;
+		std::size_t files = 0;
+		for( std::string const &f : ::Collect_sources(path, recur) ){
+			total += ::Check_file(f);
+			++files;
 		}
 
-		return 0;
+		std::cout << "[sak] " << files << " file(s), " << total << " violation(s)\n";
+
+		return total == 0 ? 0 : 1;
 	}
 
 	std::cerr << "error: no such file or directory: " << target << "\n";
