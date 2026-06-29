@@ -502,6 +502,150 @@ static void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Viola
 	}
 }
 
+// §8.4 비기호형↔괄호 경계 공백 (@마스크, 같은 행).
+// 단어 다음 여는괄호 ((·[·{) 사이의 공백 = 위반.
+// 닫는괄호 ())·]·}) 다음에 단어가 무공백으로 붙으면 = 위반.
+// 꺾쇠 < > 는 비교/꺾쇠 모호성 탓에 sak 보수 영역에서 제외(§5.1·범주 4).
+static void Check_word_paren_space(
+	std::string const &mask, int const row, std::vector<Violation> &out
+){
+	int const n = static_cast<int>(mask.size());
+	int p = 0;
+
+	while( p < n && (mask[p] == '\t' || mask[p] == ' ') ){
+		++p;
+	}
+
+	while(p < n){
+		char const c = mask[p];
+
+		if( ::is_word_char(c) ){
+			int const
+				e
+				= [n, &mask](int res){
+					for( ; res < n && ::is_word_char(mask[res]); ++res ){}
+
+					return res;
+				}(p),
+				q
+				= [n, &mask](int res){
+					for(; res < n && mask[res] == ' '; ++res){}
+
+					return res;
+				}(e)
+			;
+
+			if( q > e && q < n && (mask[q] == '(' || mask[q] == '[' || mask[q] == '{') ){
+				out.push_back({ row, e, "8.4", "space between word and opening bracket" });
+			}
+
+			p = e;
+
+			continue;
+		}
+
+		if( (c == ')' || c == ']' || c == '}') && p + 1 < n && ::is_word_char(mask[p + 1]) ){
+			out.push_back({ row, p + 1, "8.4", "missing space between closing bracket and word" });
+		}
+
+		++p;
+	}
+}
+
+// row 의 마지막 의미 토큰 열(@마스크). 없으면 -1.
+static auto Last_significant_col(std::string const &mask_row)->int{
+	int p = static_cast<int>(mask_row.size()) - 1;
+
+	while( p >= 0 && (mask_row[p] == ' ' || mask_row[p] == '\t' || mask_row[p] == '@') ){
+		--p;
+	}
+
+	return p;
+}
+
+// row 의 첫 의미 토큰 열(@마스크). 없으면 -1.
+static auto First_significant_col(std::string const &mask_row)->int{
+	int const n = static_cast<int>(mask_row.size());
+	int p = 0;
+
+	while( p < n && (mask_row[p] == ' ' || mask_row[p] == '\t' || mask_row[p] == '@') ){
+		++p;
+	}
+
+	return p < n ? p : -1;
+}
+
+// §9.3 비기호형 토큰의 개행 제한 — 닫는 ')' + 단어 다음 행 형태만 (@마스크).
+// row 의 마지막 의미 토큰이 ')' 이고 *다음 행*(공행 건너지 않음) 첫 의미 토큰이 단어면 위반.
+// 그 외 형태(단어 + 단어, 단어 + 여는괄호, '}' + 단어, 공행으로 분리된 두 토큰,
+//   가상괄호 발현 자리 등)는 §5.5 변수선언/using/return 등의 다중행 합법 발현과
+//   공행으로 단락이 갈린 정상 케이스를 가르려면 의미 해석이 필요해 sak 보수 영역 밖이다.
+//   (sak_coverage.md '구현 로드맵' 참조 — 가상괄호 발현은 단계 3 §5.5 위에서 다룬다.)
+static void Check_word_paren_newline(
+	Lines const &mask, int const row, std::vector<Violation> &out
+){
+	int const n_rows = static_cast<int>(mask.size());
+
+	if(row + 1 >= n_rows){
+		return;
+	}
+
+	int const l = ::Last_significant_col(mask[row]);
+
+	if(l < 0 || mask[row][l] != ')'){
+		return;
+	}
+
+	int const nc = ::First_significant_col(mask[row + 1]);
+
+	if( nc < 0 || !::is_word_char(mask[row + 1][nc]) ){
+		return;
+	}
+
+	out.push_back({ row + 1, nc, "9.3", "newline between closing ')' and word" });
+}
+
+// 선두 탭 개수 = 들여쓰기 깊이.
+static auto Indent_depth(std::string const &line)->int{
+	int const n = static_cast<int>(line.size());
+	int p = 0;
+
+	while(p < n && line[p] == '\t'){
+		++p;
+	}
+
+	return p;
+}
+
+// §9.4 공행 기본 유효성 (raw 행).
+// 길이 0 의 공행은: 파일 경계가 아니어야 하고, 위·아래 인접 행도 공행이 아니어야 하며,
+// 두 인접 행의 들여쓰기 깊이가 같아야 한다. (§9.2 종속의 강제 공행은 범주 4 → 검사 외.)
+static void Check_blank_line(
+	Lines const &lines, int const row, std::vector<Violation> &out
+){
+	if(!lines[row].empty()){
+		return;
+	}
+
+	int const last = static_cast<int>(lines.size()) - 1;
+
+	if(row == 0 || row == last){
+		out.push_back({ row, 0, "9.4", "blank line at file boundary" });
+
+		return;
+	}
+
+	if(lines[row - 1].empty() || lines[row + 1].empty()){
+		out.push_back({ row, 0, "9.4", "consecutive blank lines" });
+
+		return;
+	}
+
+	if( ::Indent_depth(lines[row - 1]) != ::Indent_depth(lines[row + 1]) ){
+		out.push_back({ row, 0, "9.4", "neighbors differ in indentation" });
+	}
+}
+
 // §3 금지 키워드 typedef/goto (@마스크, 단어 경계).
 static void Check_banned(std::string const &mask, int const row, std::vector<Violation> &out){
 	static std::string const Banned[] = { "typedef", "goto" };
@@ -539,6 +683,9 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		::Check_space_run(mask[row], row, out);
 		::Check_inner_space(mask[row], row, out);
 		::Check_ctrl_brace(mask, row, out);
+		::Check_word_paren_space(mask[row], row, out);
+		::Check_word_paren_newline(mask, row, out);
+		::Check_blank_line(lines, row, out);
 		::Check_banned(mask[row], row, out);
 	}
 
