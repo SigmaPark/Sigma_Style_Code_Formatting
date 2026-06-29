@@ -41,8 +41,10 @@ static auto is_digit_sep(std::string const &line, int const i)->bool{
 // '"'(위치 quote) 앞의 식별자 런 시작 위치.
 static auto Word_start(std::string const &line, int const quote)->int{
 	int j = quote - 1;
+
 	while(j >= 0){
 		unsigned char const ch = static_cast<unsigned char>(line[j]);
+
 		if( !std::isalnum(ch) && ch != '_' ){
 			break;
 		}
@@ -69,6 +71,7 @@ static auto raw_closes_at(std::string const &line, int const i, std::string cons
 
 	int const dlen = static_cast<int>(delim.size());
 	int const n = static_cast<int>(line.size());
+
 	if(i + 1 + dlen >= n){
 		return false;
 	}
@@ -126,6 +129,7 @@ static auto Scan_one_line(
 
 	int seg_start = 0;
 	Seg_kind kind = Seg_kind::code;
+
 	if(mode == Mode::block_comment){
 		kind = Seg_kind::comment;
 	} else if(mode == Mode::raw_string){
@@ -170,6 +174,7 @@ static auto Scan_one_line(
 				// 구분자: '"' 다음부터 '(' 전까지.
 				raw_delim.clear();
 				i += 1;
+
 				while(i < n && line[i] != '('){
 					raw_delim += line[i];
 					++i;
@@ -248,6 +253,7 @@ static auto Scan_one_line(
 	Mode const out_mode = carry_on ? mode : Mode::normal;
 
 	std::string out_delim;
+	
 	if(mode == Mode::raw_string){
 		out_delim = std::move(raw_delim);
 	}

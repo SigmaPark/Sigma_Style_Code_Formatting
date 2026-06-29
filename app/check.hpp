@@ -17,5 +17,5 @@ struct Violation{
 	std::string message;
 };
 
-// 행들을 규약 검사해 위반을 낸다(§1.1·§1.2는 raw 행, §8.2·§3은 @마스크 위에서).
+// 행들을 규약 검사해 위반을 낸다(§1.1·§1.2는 raw 행, §8.1·§8.2·§3은 @마스크 위에서).
 auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violation>;

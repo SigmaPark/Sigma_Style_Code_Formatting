@@ -149,6 +149,7 @@ auto main(int const argc, char const * const *argv)->int{
 	if( std::error_code ec; fs::is_directory(path, ec) ){
 		std::size_t total = 0;
 		std::size_t files = 0;
+		
 		for( std::string const &f : ::Collect_sources(path, recur) ){
 			total += ::Check_file(f);
 			++files;
