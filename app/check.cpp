@@ -323,28 +323,204 @@ static void Check_inner_space(std::string const &mask, int const row, std::vecto
 	}
 }
 
+// (row,col)부터 공백·탭·@(주석/문자열)·개행을 건너뛴 다음 코드 문자를 찾는다(최대 max_row 행).
+static auto Next_code(Lines const &mask, int const max_row, int &row, int &col)->bool{
+	for(; row <= max_row; ++row, col = 0){
+		for( int const len = static_cast<int>(mask[row].size()); col < len; ++col ){
+			if(mask[row][col] != ' ' && mask[row][col] != '\t' && mask[row][col] != '@'){
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+// (row,col)의 '(' 에서 짝이 맞는 ')' 를 찾는다(최대 max_row 행). 깊이만 센다.
+static auto Match_paren(Lines const &mask, int const max_row, int &row, int &col)->bool{
+	for(int depth = 0; row <= max_row; ++row, col = 0){
+		for( int const len = static_cast<int>(mask[row].size()); col < len; ++col ){
+			if(char const c = mask[row][col]; c == '('){
+				++depth;
+			} else if(c == ')'){
+				if(--depth == 0){
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+// (row,col) 직전의 의미 토큰 위치를 찾는다(공백·탭·@·개행 건너뜀). 찾으면 true.
+static auto Prev_significant(Lines const &mask, int &row, int &col)->bool{
+	while(row >= 0){
+		for(; col >= 0; --col){
+			if(mask[row][col] != ' ' && mask[row][col] != '\t' && mask[row][col] != '@'){
+				return true;
+			}
+		}
+
+		if(--row >= 0){
+			col = static_cast<int>(mask[row].size()) - 1;
+		}
+	}
+
+	return false;
+}
+
+// (row,col)의 '}' 에서 짝이 맞는 '{' 를 역방향으로 찾는다. 찾으면 true 와 '{' 위치를 채운다.
+static auto Match_brace_back(Lines const &mask, int &row, int &col)->bool{
+	for(int depth = 0; row >= 0;){
+		for(; col >= 0; --col){
+			if(char const ch = mask[row][col]; ch == '}'){
+				++depth;
+			} else if(ch == '{'){
+				if(--depth == 0){
+					return true;
+				}
+			}
+		}
+
+		if(--row >= 0){
+			col = static_cast<int>(mask[row].size()) - 1;
+		}
+	}
+
+	return false;
+}
+
+// (row,col) 직전의 의미 토큰이 식별자면 그 식별자를, 아니면 빈 문자열을 돌려준다.
+static auto Word_before(Lines const &mask, int const row, int const col)->std::string{
+	int r = row, c = col - 1;
+
+	if( !::Prev_significant(mask, r, c) || !::is_word_char(mask[r][c]) ){
+		return "";
+	}
+
+	int s = c;
+
+	while( s >= 0 && ::is_word_char(mask[r][s]) ){
+		--s;
+	}
+
+	return mask[r].substr(s + 1, c - s);
+}
+
+// while(...); 가 do-while 꼬리인지: 직전 '}' 가 'do' 블록을 닫는지 역방향으로 확인.
+static auto Is_do_tail(Lines const &mask, int const row, int const col)->bool{
+	int r = row, c = col - 1;
+
+	if( !::Prev_significant(mask, r, c) || mask[r][c] != '}' ){
+		return false;
+	}
+
+	if( !::Match_brace_back(mask, r, c) ){
+		return false;
+	}
+
+	return ::Word_before(mask, r, c) == "do";
+}
+
+// (line,col)에서 시작하는 식별자 런을 돌려준다(식별자가 아니면 빈 문자열).
+static auto Word_at(std::string const &line, int const col)->std::string{
+	int const len = static_cast<int>(line.size());
+	int e = col;
+
+	while( e < len && ::is_word_char(line[e]) ){
+		++e;
+	}
+
+	return line.substr(col, e - col);
+}
+
+// (line,col) 이 식별자 런의 시작인지(왼쪽 경계가 단어문자가 아님).
+static auto Word_starts_at(std::string const &line, int const i)->bool{
+	return ::is_word_char(line[i]) && ( i == 0 || !::is_word_char(line[i - 1]) );
+}
+
+// §3 제어문 중괄호 강제 (@마스크 + 인접 행). 키워드 다음 본문이 '{' 인지 본다.
+// if/for/while/switch 는 조건 ')' 다음을, do/else 는 키워드 다음을 본다.
+// while(...); 는 직전 '}' 가 do 블록을 닫으면 do-while 꼬리라 합법, 아니면 위반(빈본문 while).
+static void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Violation> &out){
+	std::string const &line = mask[row];
+	int const len = static_cast<int>(line.size()), last = static_cast<int>(mask.size()) - 1;
+	int const max_row = row + 4 < last ? row + 4 : last;
+
+	for(int i = 0; i < len;){
+		if( !::Word_starts_at(line, i) ){
+			++i;
+
+			continue;
+		}
+
+		std::string const word = ::Word_at(line, i);
+		int const e = i + static_cast<int>(word.size());
+
+		auto const
+			[br, bc, body_found]
+			= [row, e, &mask, max_row, &word](bool const has_cond){
+				struct{ int _0, _1; bool _2; } res{ row, e, false };
+				auto &[br, bc, body_found] = res;
+
+				if(has_cond){
+					if(
+						int pr = row, pc = e;
+						::Next_code(mask, max_row, pr, pc) && mask[pr][pc] == '('
+					){
+						if( ::Match_paren(mask, max_row, pr, pc) ){
+							br = pr;
+							bc = pc + 1;
+							body_found = ::Next_code(mask, max_row, br, bc);
+						}
+					}
+				} else if(word == "do" || word == "else"){
+					body_found = ::Next_code(mask, max_row, br, bc);
+				}
+
+				return res;
+			}(word == "if" || word == "for" || word == "while" || word == "switch")
+		;
+
+		if(body_found){
+			char const body = mask[br][bc];
+
+			bool const
+				legal
+				= word == "while" && body == ';' ? ::Is_do_tail(mask, row, i)
+				: word == "else" && body != '{' ? ::Word_at(mask[br], bc) == "if"
+				: body == '{'
+			;
+
+			if(!legal){
+				out.push_back({ row, i, "3", word + " needs braces" });
+			}
+		}
+
+		i = e;
+	}
+}
+
 // §3 금지 키워드 typedef/goto (@마스크, 단어 경계).
 static void Check_banned(std::string const &mask, int const row, std::vector<Violation> &out){
 	static std::string const Banned[] = { "typedef", "goto" };
 
 	for(std::string const &kw : Banned){
-		std::size_t pos = mask.find(kw);
-
-		while(pos != std::string::npos){
-			std::size_t const end = pos + kw.size();
-
-			bool const
-				left_ok = pos == 0 || !::is_word_char(mask[pos - 1]),
-				right_ok = end >= mask.size() || !::is_word_char(mask[end])
-			;
-
-			if(left_ok && right_ok){
+		for(
+			std::size_t pos = mask.find(kw);
+			pos != std::string::npos;
+			pos = mask.find(kw, pos + 1)
+		){
+			if(
+				std::size_t const end = pos + kw.size();
+				( pos == 0 || !::is_word_char(mask[pos - 1]) )
+				&& ( end >= mask.size() || !::is_word_char(mask[end]) )
+			){
 				int const col = static_cast<int>(pos);
 
 				out.push_back({ row, col, "3", "banned keyword: " + kw });
 			}
-
-			pos = mask.find(kw, pos + 1);
 		}
 	}
 }
@@ -362,6 +538,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		::Check_tab_use(mask[row], row, out);
 		::Check_space_run(mask[row], row, out);
 		::Check_inner_space(mask[row], row, out);
+		::Check_ctrl_brace(mask, row, out);
 		::Check_banned(mask[row], row, out);
 	}
 
