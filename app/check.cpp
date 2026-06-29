@@ -12,12 +12,7 @@
 
 // 코드포인트가 동아시아 와이드/전각 근사 범위에 드는지.
 static auto is_wide(unsigned long const cp)->bool{
-	struct Range{
-		unsigned long lo;
-		unsigned long hi;
-	};
-
-	static Range const
+	struct Range{ unsigned long lo, hi; } constexpr
 		Wide_ranges[]
 		= {
 			{ 0x1100, 0x115F },
@@ -46,9 +41,8 @@ static auto is_wide(unsigned long const cp)->bool{
 
 // 행의 표시 폭 (§1.1): 탭=4, 전각=2, 그 외=1. UTF-8 을 코드포인트로 디코드해 잰다.
 static auto Display_width(std::string const &line)->std::size_t{
-	std::size_t width = 0;
-	std::size_t i = 0;
 	std::size_t const n = line.size();
+	std::size_t width = 0, i = 0;
 
 	while(i < n){
 		unsigned char const lead = static_cast<unsigned char>(line[i]);
@@ -191,6 +185,144 @@ static void Check_space_run(std::string const &mask, int const row, std::vector<
 	}
 }
 
+// 여는 괄호에 대응하는 닫는 괄호.
+static auto Closer_of(char const open)->char{
+	if(open == '('){
+		return ')';
+	}
+
+	if(open == '['){
+		return ']';
+	}
+
+	return '}';
+}
+
+// §8.5 한 행 안 중첩 괄호의 안쪽 공백 (@마스크). ( ) [ ] { } 만 대상.
+// 같은 종류 중첩 단계로 n 결정: ()[] 는 n=단계, {} 는 n=단계+1.
+// < > 와 [[ ]] 와 다중행 괄호는 제외(에이전트 몫). 빈 괄호는 단계에서 뺀다.
+static void Check_inner_space(std::string const &mask, int const row, std::vector<Violation> &out){
+	struct Frame{
+		char open;
+		int col;
+		int child;   // 안에 든 같은 종류 비어있지 않은 짝의 최대 단계 (없으면 -1)
+	};
+
+	struct Pair{
+		char open;
+		int from, to;
+		int stage;
+	};
+
+	int const n = static_cast<int>(mask.size());
+	std::vector<Frame> stack;
+	std::vector<Pair> pairs;
+	bool aborted = false;
+	int i = 0;
+
+	while(i < n){
+		char const c = mask[i];
+
+		// [[ ... ]] 어트리뷰트는 별도 괄호류라 §8.5 공식 밖 → 통째로 건너뛴다.
+		if(c == '[' && i + 1 < n && mask[i + 1] == '['){
+			int j = i + 2;
+
+			while( j + 1 < n && !(mask[j] == ']' && mask[j + 1] == ']') ){
+				++j;
+			}
+
+			if(j + 1 >= n){
+				aborted = true;
+
+				break;
+			}
+
+			i = j + 2;
+
+			continue;
+		}
+
+		if(c == '(' || c == '[' || c == '{'){
+			stack.push_back({ c, i, -1 });
+			++i;
+
+			continue;
+		}
+
+		if(c == ')' || c == ']' || c == '}'){
+			if(stack.empty()){
+				++i;
+
+				continue;
+			}
+
+			if( c != ::Closer_of(stack.back().open) ){
+				aborted = true;
+
+				break;
+			}
+
+			Frame const top = stack.back();
+			stack.pop_back();
+
+			if(i > top.col + 1){
+				int const stage = top.child < 0 ? 0 : top.child + 1;
+
+				pairs.push_back({ top.open, top.col, i, stage });
+
+				int k = static_cast<int>(stack.size()) - 1;
+
+				while(k >= 0){
+					if(stack[k].open == top.open){
+						if(stage > stack[k].child){
+							stack[k].child = stage;
+						}
+
+						break;
+					}
+
+					--k;
+				}
+			}
+
+			++i;
+
+			continue;
+		}
+
+		++i;
+	}
+
+	if(aborted){
+		return;
+	}
+
+	for(Pair const &pr : pairs){
+		int const want = pr.open == '{' ? pr.stage + 1 : pr.stage;
+		std::string const msg = "inner space must be " + std::to_string(want);
+
+		int after = 0;
+
+		while(pr.from + 1 + after < n && mask[pr.from + 1 + after] == ' '){
+			++after;
+		}
+
+		int before = 0;
+
+		while(pr.to - 1 - before > pr.from && mask[pr.to - 1 - before] == ' '){
+			++before;
+		}
+
+		if(after != want){
+			out.push_back({ row, pr.from, "8.5", msg });
+		}
+
+		if(before != want){
+			out.push_back({ row, pr.to, "8.5", msg });
+		}
+	}
+}
+
 // §3 금지 키워드 typedef/goto (@마스크, 단어 경계).
 static void Check_banned(std::string const &mask, int const row, std::vector<Violation> &out){
 	static std::string const Banned[] = { "typedef", "goto" };
@@ -200,8 +332,11 @@ static void Check_banned(std::string const &mask, int const row, std::vector<Vio
 
 		while(pos != std::string::npos){
 			std::size_t const end = pos + kw.size();
-			bool const left_ok = pos == 0 || !::is_word_char(mask[pos - 1]);
-			bool const right_ok = end >= mask.size() || !::is_word_char(mask[end]);
+
+			bool const
+				left_ok = pos == 0 || !::is_word_char(mask[pos - 1]),
+				right_ok = end >= mask.size() || !::is_word_char(mask[end])
+			;
 
 			if(left_ok && right_ok){
 				int const col = static_cast<int>(pos);
@@ -226,6 +361,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		::Check_trailing(mask[row], row, out);
 		::Check_tab_use(mask[row], row, out);
 		::Check_space_run(mask[row], row, out);
+		::Check_inner_space(mask[row], row, out);
 		::Check_banned(mask[row], row, out);
 	}
 

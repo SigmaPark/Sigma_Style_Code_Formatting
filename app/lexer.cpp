@@ -69,8 +69,7 @@ static auto raw_closes_at(std::string const &line, int const i, std::string cons
 		return false;
 	}
 
-	int const dlen = static_cast<int>(delim.size());
-	int const n = static_cast<int>(line.size());
+	int const dlen = static_cast<int>(delim.size()), n = static_cast<int>(line.size());
 
 	if(i + 1 + dlen >= n){
 		return false;
@@ -110,7 +109,7 @@ static auto Scan_one_line(
 
 		bool const cont = n > 0 && line[n - 1] == '\\';
 
-		return{ std::move(segs), Scan_state{ Mode::normal, "", cont }  };
+		return{  std::move(segs), Scan_state{ Mode::normal, "", cont }  };
 	}
 
 	Mode mode = in.mode;
@@ -124,7 +123,7 @@ static auto Scan_one_line(
 
 		bool const cont = n > 0 && line[n - 1] == '\\';
 
-		return{ std::move(segs), Scan_state{ Mode::normal, "", cont }  };
+		return{  std::move(segs), Scan_state{ Mode::normal, "", cont }  };
 	}
 
 	int seg_start = 0;
@@ -253,12 +252,12 @@ static auto Scan_one_line(
 	Mode const out_mode = carry_on ? mode : Mode::normal;
 
 	std::string out_delim;
-	
+
 	if(mode == Mode::raw_string){
 		out_delim = std::move(raw_delim);
 	}
 
-	return{ std::move(segs), Scan_state{ out_mode, std::move(out_delim), false }  };
+	return{  std::move(segs), Scan_state{ out_mode, std::move(out_delim), false }  };
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 

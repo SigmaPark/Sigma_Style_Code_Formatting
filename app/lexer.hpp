@@ -16,8 +16,7 @@ enum class Seg_kind{ code, comment, string_lit, char_lit, raw_string, preproc };
 
 struct Segment{
 	Seg_kind kind;
-	int row;   // 0-기준 행
-	int col;   // 행 내 시작 열(바이트)
+	int row, col;   // 0-기준 행, 행 내 시작 열(바이트)
 	int len;   // 바이트 길이
 };
 
