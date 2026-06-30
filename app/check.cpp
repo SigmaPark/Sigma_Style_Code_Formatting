@@ -1480,11 +1480,12 @@ static void Check_attribute_close(
 	}
 }
 
-// §5.5 가상괄호 — return/throw 앵커.
-// 키워드 행 안에 (괄호 깊이 0 의) ';' 가 없으면 다중행 발현이라 보고,
-// 다음 코드 행의 들여쓰기가 키워드 행 + 1 이상인지 검사. 그 외 앵커(`->`·`case`·`:`·
-// 변수선언)는 의미적 판정이 더 필요해 단계 3 1차 영역 밖이다.
-static void Check_anchor_return_throw(
+// §5.5 가상괄호 — return/throw/using 앵커 (같은 구조: 여는 키워드 ~ 닫는 ';').
+// 세 조건 검사: (a) 여는 키워드가 행 마지막 코드 토큰인지, (b) 짝 ';' 가 그 행 첫 코드
+// 토큰인지, (c) 다음 코드 행 들여쓰기 ≥ cur+1 (내용 +1). 세 키워드는 정본 §5.5 표에서
+// 동일 구조(open=keyword, close=';')이므로 단일 매처로 통합. 그 외 앵커(`->`·`case`·
+// 변수선언·`:`)는 의미적 판정이 더 필요해 별도.
+static void Check_anchor_keyword_semicolon(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
@@ -1504,7 +1505,7 @@ static void Check_anchor_return_throw(
 			std::string const w = ::Word_at(m, c);
 			int const e = c + static_cast<int>(w.size());
 
-			if(w != "return" && w != "throw"){
+			if(w != "return" && w != "throw" && w != "using"){
 				c = e;
 
 				continue;
@@ -1549,9 +1550,7 @@ static void Check_anchor_return_throw(
 				if( ::Is_code_char(m[cc]) ){
 					keyword_last = false;
 
-					out.push_back(
-						{ r, cc, "5.5", "return/throw: keyword not last token on line" }
-					);
+					out.push_back({ r, cc, "5.5", "return/throw/using: keyword not last" });
 
 					break;
 				}
@@ -1563,7 +1562,7 @@ static void Check_anchor_return_throw(
 				for(int cc = 0; cc < close_col; ++cc){
 					if( ::Is_code_char(cm[cc]) ){
 						out.push_back(
-							{ close_row, cc, "5.5", "return/throw: ';' not first token on line" }
+							{ close_row, cc, "5.5", "return/throw/using: ';' not first" }
 						);
 
 						break;
@@ -2029,7 +2028,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	}
 
 	::Check_hidden_brace(lines, mask, pairs, out);
-	::Check_anchor_return_throw(lines, mask, out);
+	::Check_anchor_keyword_semicolon(lines, mask, out);
 	::Check_anchor_trailing_return(lines, mask, out);
 	::Check_anchor_inline_type(lines, mask, pairs, out);
 	::Check_anchor_case(lines, mask, out);
