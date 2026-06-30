@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -82,19 +83,96 @@ static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<st
 	return out;
 }
 
-// 한 파일을 검사해 위반을 출력하고, 위반 개수를 돌려준다.
-static auto Check_file(std::string const &path)->std::size_t{
+// 1-기준 [start, end] 라인 범위. 기본값은 파일 전체.
+struct Line_range{
+	std::size_t start;
+	std::size_t end;
+};
+
+// "a:b" / "a:" / ":b" 를 파싱한다. 성공 시 true. 양쪽 모두 1 이상이어야 하며 start <= end.
+static auto Parse_line_range(std::string const &s, Line_range &out)->bool{
+	std::size_t const colon = s.find(':');
+
+	if(colon == std::string::npos){
+		return false;
+	}
+
+	std::string const left = s.substr(0, colon);
+	std::string const right = s.substr(colon + 1);
+
+	std::size_t start = 1;
+	std::size_t end = std::numeric_limits<std::size_t>::max();
+
+	auto const
+		parse_one
+		= [](std::string const &tok, std::size_t &out_v)->bool{
+			if(tok.empty()){
+				return true;
+			}
+
+			for(char const c : tok){
+				if(  !std::isdigit( static_cast<unsigned char>(c) )  ){
+					return false;
+				}
+			}
+
+			try{
+				std::size_t pos = 0;
+				unsigned long long const v = std::stoull(tok, &pos);
+
+				if(pos != tok.size() || v < 1){
+					return false;
+				}
+
+				out_v = static_cast<std::size_t>(v);
+			} catch(...){
+				return false;
+			}
+
+			return true;
+		}
+	;
+
+	if( !parse_one(left, start) ){
+		return false;
+	}
+
+	if( !parse_one(right, end) ){
+		return false;
+	}
+
+	if(start > end){
+		return false;
+	}
+
+	out = Line_range{ start, end };
+
+	return true;
+}
+
+// 한 파일을 검사해 위반을 출력하고, 위반 개수를 돌려준다. 범위 밖의 위반은 건너뛴다.
+static auto Check_file(std::string const &path, Line_range const range)->std::size_t{
 	Lines const lines = ::Read_lines(path);
 	Seg_lines const segs = ::scan_lines(lines);
 	std::vector<Violation> const violations = ::check_lines(lines, segs);
 
+	std::size_t hits = 0;
+
 	for(Violation const &v : violations){
+		std::size_t const line_no = static_cast<std::size_t>(v.row) + 1;
+
+		if(line_no < range.start || line_no > range.end){
+			continue;
+		}
+
 		std::cout
 		<< path << ":" << v.row + 1 << ":" << v.col + 1
 		<< " [" << v.rule << "] " << v.message << "\n";
+
+		++hits;
 	}
 
-	return violations.size();
+	return hits;
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
@@ -106,30 +184,68 @@ auto main(int const argc, char const * const *argv)->int{
 		}()
 	;
 
-	bool const recur = !args.empty() && args[0] == "-r";
-
-	std::string const
-		target
-		= [recur](std::vector<std::string> const &args)->std::string{
-			if(recur){
-				if(args.size() < 2){
-					std::cerr << "usage: sak -r <directory>\n";
-
-					return{};
-				} else{
-					return args[1];
-				}
-			} else if(!args.empty()){
-				return args[0];
-			} else{
-				std::cerr << "usage: sak <file|directory> | sak -r <directory>\n";
-
-				return{};
-			}
-		}(args)
+	auto const
+		print_usage
+		= []()->void{
+			std::cerr
+			<< "usage:\n"
+			<< "  sak <file>\n"
+			<< "  sak <directory> [-r]\n"
+			<< "  sak <file> -b <start>:<end>    (e.g. 3:50, 3:, :50)\n";
+		}
 	;
 
-	if(target.empty()){
+	bool recur = false;
+	bool has_range = false;
+
+	Line_range range
+	= {
+		1,
+		std::numeric_limits<std::size_t>::max()
+	};
+
+	std::string target;
+	bool parse_ok = true;
+
+	for(std::size_t i = 0; i < args.size(); ++i){
+		std::string const &a = args[i];
+
+		if(a == "-r"){
+			recur = true;
+		} else if(a == "-b"){
+			if(i + 1 >= args.size()){
+				std::cerr << "error: -b requires a range argument (e.g. 3:50, 3:, :50)\n";
+				parse_ok = false;
+				break;
+			}
+
+			++i;
+
+			if( !::Parse_line_range(args[i], range) ){
+				std::cerr << "error: invalid -b range: " << args[i] << "\n";
+				parse_ok = false;
+				break;
+			}
+
+			has_range = true;
+		} else if(target.empty()){
+			target = a;
+		} else{
+			std::cerr << "error: unexpected argument: " << a << "\n";
+			parse_ok = false;
+			break;
+		}
+	}
+
+	if(!parse_ok || target.empty()){
+		print_usage();
+
+		return 2;
+	}
+
+	if(has_range && recur){
+		std::cerr << "error: -b cannot be combined with -r\n";
+
 		return 2;
 	}
 	//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
@@ -143,14 +259,20 @@ auto main(int const argc, char const * const *argv)->int{
 			return 2;
 		}
 
-		return ::Check_file(target) == 0 ? 0 : 1;
+		return ::Check_file(target, range) == 0 ? 0 : 1;
 	}
 
 	if( std::error_code ec; fs::is_directory(path, ec) ){
+		if(has_range){
+			std::cerr << "error: -b requires a file, not a directory\n";
+
+			return 2;
+		}
+
 		std::size_t total = 0, files = 0;
 
 		for( std::string const &f : ::Collect_sources(path, recur) ){
-			total += ::Check_file(f);
+			total += ::Check_file(f, range);
 			++files;
 		}
 
