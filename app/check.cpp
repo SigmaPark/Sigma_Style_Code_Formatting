@@ -617,11 +617,24 @@ static auto Indent_depth(std::string const &line)->int{
 	return p;
 }
 
-// §9.4 공행 기본 유효성 (raw 행).
-// 길이 0 의 공행은: 파일 경계가 아니어야 하고, 위·아래 인접 행도 공행이 아니어야 하며,
-// 두 인접 행의 들여쓰기 깊이가 같아야 한다. (§9.2 종속의 강제 공행은 범주 4 → 검사 외.)
+// 마스크상 코드 토큰을 하나라도 포함하는 행인지(전처리기·주석·문자열 only 는 false).
+static auto Has_code(std::string const &mask_row)->bool{
+	for(char const c : mask_row){
+		if(c != ' ' && c != '\t' && c != '@'){
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// §9.4 공행 기본 유효성. (§9.2 종속의 강제 공행은 범주 4 → 검사 외.)
+// 길이 0 의 공행은: 파일 경계가 아니어야 하고, 위·아래 인접 행도 공행이 아니어야 한다.
+// 들여쓰기 비교는 인접 행이 "코드 토큰을 포함하는 행"일 때만 의미가 있다.
+// 인접 행이 전처리 본문(§2 제외 — `\` 연장 행 포함)·주석 only·문자열 only 면
+// 그 행의 raw 들여쓰기는 spec 상 들여쓰기가 아니므로 비교 대상에서 뺀다.
 static void Check_blank_line(
-	Lines const &lines, int const row, std::vector<Violation> &out
+	Lines const &lines, Lines const &mask, int const row, std::vector<Violation> &out
 ){
 	if(!lines[row].empty()){
 		return;
@@ -641,8 +654,381 @@ static void Check_blank_line(
 		return;
 	}
 
+	if( !::Has_code(mask[row - 1]) || !::Has_code(mask[row + 1]) ){
+		return;
+	}
+
 	if( ::Indent_depth(lines[row - 1]) != ::Indent_depth(lines[row + 1]) ){
 		out.push_back({ row, 0, "9.4", "neighbors differ in indentation" });
+	}
+}
+
+// 문맥 불변 토큰 분류 (§8.3 단계 2 — 분류가 모양만으로 결정되는 것만).
+// 문맥 의존 토큰(* & + - < > : && ! ~ 등)과 분류 모호(<< >> ::)는 모두 skip.
+enum class Tk_cls{
+	skip,
+	word,
+	open_b, close_b,
+	sep, // ; ,
+	bin_ns, // . -> .* ->* (양쪽 무공백)
+	bin_s, // = == != <= >= <=> || ? / % | ^ 와 모든 복합대입 (양쪽 공백)
+	inc_dec, // ++ --
+};
+
+struct Tok_8_3{
+	int col, len;
+	Tk_cls cls;
+};
+
+// @마스크 한 행을 토큰열로 변환. 더 긴 모양 우선 매칭, 의심 자리는 모두 skip.
+static auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
+	std::vector<Tok_8_3> out;
+	int const n = static_cast<int>(mask.size());
+	int i = 0;
+
+	while(i < n){
+		char const c = mask[i];
+
+		if(c == ' ' || c == '\t' || c == '@'){
+			++i;
+
+			continue;
+		}
+
+		if( ::is_word_char(c) ){
+			int const s = i;
+
+			while( i < n && ::is_word_char(mask[i]) ){
+				++i;
+			}
+
+			out.push_back({ s, i - s, Tk_cls::word });
+
+			continue;
+		}
+
+		// CUDA <<< >>> 는 한 덩이 괄호로 본다(§5). 토큰화 단계에서 통째 잡아 skip.
+		if(c == '<' && i + 2 < n && mask[i + 1] == '<' && mask[i + 2] == '<'){
+			out.push_back({ i, 3, Tk_cls::open_b });
+			i += 3;
+
+			continue;
+		}
+
+		if(c == '>' && i + 2 < n && mask[i + 1] == '>' && mask[i + 2] == '>'){
+			out.push_back({ i, 3, Tk_cls::close_b });
+			i += 3;
+
+			continue;
+		}
+
+		// [[ ]] 속성괄호도 한 덩이로.
+		if(c == '[' && i + 1 < n && mask[i + 1] == '['){
+			out.push_back({ i, 2, Tk_cls::open_b });
+			i += 2;
+
+			continue;
+		}
+
+		if(c == ']' && i + 1 < n && mask[i + 1] == ']'){
+			out.push_back({ i, 2, Tk_cls::close_b });
+			i += 2;
+
+			continue;
+		}
+
+		if(c == '(' || c == '[' || c == '{'){
+			out.push_back({ i, 1, Tk_cls::open_b });
+			++i;
+
+			continue;
+		}
+
+		if(c == ')' || c == ']' || c == '}'){
+			out.push_back({ i, 1, Tk_cls::close_b });
+			++i;
+
+			continue;
+		}
+
+		// 3-char 기호형 (긴 모양 우선)
+		if(i + 2 < n){
+			char const c2 = mask[i + 1], c3 = mask[i + 2];
+
+			if(c == '-' && c2 == '>' && c3 == '*'){
+				out.push_back({ i, 3, Tk_cls::bin_ns });
+				i += 3;
+
+				continue;
+			}
+
+			if(c == '<' && c2 == '=' && c3 == '>'){
+				out.push_back({ i, 3, Tk_cls::bin_s });
+				i += 3;
+
+				continue;
+			}
+
+			if( (c == '<' || c == '>') && c2 == c && c3 == '=' ){
+				out.push_back({ i, 3, Tk_cls::bin_s });
+				i += 3;
+
+				continue;
+			}
+
+			if(c == '.' && c2 == '.' && c3 == '.'){
+				out.push_back({ i, 3, Tk_cls::skip });
+				i += 3;
+
+				continue;
+			}
+		}
+
+		// 2-char 기호형
+		if(i + 1 < n){
+			char const c2 = mask[i + 1];
+
+			// :: 는 범위해결(양방향)과 전역(단방향) 분리가 의미적이라 skip.
+			if(c == ':' && c2 == ':'){
+				out.push_back({ i, 2, Tk_cls::skip });
+				i += 2;
+
+				continue;
+			}
+
+			if( (c == '=' || c == '!' || c == '<' || c == '>') && c2 == '=' ){
+				out.push_back({ i, 2, Tk_cls::bin_s });
+				i += 2;
+
+				continue;
+			}
+
+			if(c == '|' && c2 == '|'){
+				out.push_back({ i, 2, Tk_cls::bin_s });
+				i += 2;
+
+				continue;
+			}
+
+			if( (c == '+' && c2 == '+') || (c == '-' && c2 == '-') ){
+				out.push_back({ i, 2, Tk_cls::inc_dec });
+				i += 2;
+
+				continue;
+			}
+
+			if(
+				c2 == '='
+				&& (
+					c == '+' || c == '-' || c == '*' || c == '/' || c == '%'
+					|| c == '&' || c == '^' || c == '|'
+				)
+			){
+				out.push_back({ i, 2, Tk_cls::bin_s });
+				i += 2;
+
+				continue;
+			}
+
+			if(c == '-' && c2 == '>'){
+				out.push_back({ i, 2, Tk_cls::bin_ns });
+				i += 2;
+
+				continue;
+			}
+
+			if(c == '.' && c2 == '*'){
+				out.push_back({ i, 2, Tk_cls::bin_ns });
+				i += 2;
+
+				continue;
+			}
+
+			// && << >> 는 분류 모호(우값참조·템플릿 닫힘·스트림 vs 시프트)라 skip.
+			if(
+				(c == '&' && c2 == '&')
+				|| (c == '<' && c2 == '<')
+				|| (c == '>' && c2 == '>')
+			){
+				out.push_back({ i, 2, Tk_cls::skip });
+				i += 2;
+
+				continue;
+			}
+		}
+
+		// 1-char 기호형
+		switch(c){
+			case ';':
+			case ',':
+				out.push_back({ i, 1, Tk_cls::sep });
+
+				break;
+			case '.':
+				out.push_back({ i, 1, Tk_cls::bin_ns });
+
+				break;
+			case '?':
+			case '=':
+			case '/':
+			case '%':
+			case '|':
+			case '^':
+				out.push_back({ i, 1, Tk_cls::bin_s });
+
+				break;
+			default:
+				// * & + - < > : ! ~ 등 분류 의존 토큰은 모두 skip.
+				out.push_back({ i, 1, Tk_cls::skip });
+
+				break;
+		}
+
+		++i;
+	}
+
+	return out;
+}
+
+// §8.3 문맥 불변 토큰의 단일행 공백 검사 (@마스크).
+// 그룹별 규칙:
+//   sep `;` `,`     — 앞 공백 0, 뒤 공백 ≥ 1 (다음 토큰이 close_b·sep이면 skip).
+//   bin_ns . -> .* ->*  — 양쪽 공백 0. 단 좌/우 토큰이 같은 행에 없거나 분류가
+//                          word/괄호가 아니면 그 쪽은 검사 제외(가상괄호·다중행 영역 양보).
+//   bin_s 양쪽 공백 토큰 — 양쪽 공백 ≥ 1. 좌/우가 word·close_b/open_b 가 아닌
+//                          기호형이면 그 쪽 검사 제외(연쇄·단항 영역 양보).
+//   inc_dec ++ --    — 한 쪽은 0(피연산자 부착). 양쪽 모두 공백 > 0 이면 위반.
+// 괄호 경계 투명성(§5.3): 단일행 괄호 안 첫·마지막 토큰은 감싸는 괄호를 인접 토큰으로 보지 않음.
+static void Check_token_space(
+	std::string const &mask, int const row, std::vector<Violation> &out
+){
+	auto const toks = ::Tokenize_8_3(mask);
+	int const n = static_cast<int>(toks.size()), mask_n = static_cast<int>(mask.size());
+
+	if(n < 2){
+		return;
+	}
+
+	auto gap_before
+		= [&mask, &toks](int const i)->int{
+			int g = 0;
+
+			while(toks[i].col - 1 - g >= 0 && mask[ toks[i].col - 1 - g ] == ' '){
+				++g;
+			}
+
+			return g;
+		}
+	;
+
+	auto gap_after
+		= [&mask, &toks, mask_n](int const i)->int{
+			int const e = toks[i].col + toks[i].len;
+			int g = 0;
+
+			while(e + g < mask_n && mask[e + g] == ' '){
+				++g;
+			}
+
+			return g;
+		}
+	;
+
+	auto word_eq
+		= [&mask, &toks](int const i, char const *kw)->bool{
+			if(toks[i].cls != Tk_cls::word){
+				return false;
+			}
+
+			int j = 0;
+
+			while(kw[j] != '\0' && j < toks[i].len && mask[ toks[i].col + j ] == kw[j]){
+				++j;
+			}
+
+			return kw[j] == '\0' && j == toks[i].len;
+		}
+	;
+
+	for(int i = 0; i < n; ++i){
+		Tok_8_3 const &t = toks[i];
+		bool const has_l = i > 0, has_r = i + 1 < n;
+		Tk_cls const left_cls = has_l ? toks[i - 1].cls : Tk_cls::skip;
+		Tk_cls const right_cls = has_r ? toks[i + 1].cls : Tk_cls::skip;
+
+		// `operator =`·`operator ==`·`operator,` 등: `operator` 키워드 뒤 첫 기호형은
+		// 오버로드 함수명의 일부이므로 §8.3 검사 영역 밖이다.
+		if( has_l && word_eq(i - 1, "operator") ){
+			continue;
+		}
+		// 투명성: 좌측 open_b·우측 close_b 는 인접 토큰으로 보지 않는다.
+		bool const eff_l = has_l && left_cls != Tk_cls::open_b;
+		bool const eff_r = has_r && right_cls != Tk_cls::close_b;
+		bool const l_operand = left_cls == Tk_cls::word || left_cls == Tk_cls::close_b;
+		bool const r_operand = right_cls == Tk_cls::word || right_cls == Tk_cls::open_b;
+
+		switch(t.cls){
+			case Tk_cls::sep:{
+				// `for(init;;++itr2)` 처럼 `;` 두 개가 연속하면 그 사이는 공백 1 필수
+				// (spec §8.3 SEP 항 예외). `,` 끼리·`,`+`;` 혼합은 일반 SEP 룰을 그대로 따른다.
+				bool const
+					semi_chain
+					= t.len == 1 && mask[t.col] == ';'
+					&& has_l && toks[i - 1].cls == Tk_cls::sep
+					&& toks[i - 1].len == 1 && mask[ toks[i - 1].col ] == ';'
+				;
+
+				if( eff_l && !semi_chain && gap_before(i) > 0 ){
+					out.push_back({ row, t.col, "8.3", "no space before separator" });
+				}
+
+				if( eff_l && semi_chain && gap_before(i) == 0 ){
+					out.push_back({ row, t.col, "8.3", "space required between consecutive ';'" });
+				}
+
+				if( eff_r && right_cls != Tk_cls::sep && gap_after(i) == 0 ){
+					out.push_back({ row, t.col + t.len, "8.3", "space required after separator" });
+				}
+
+				break;
+			}
+			case Tk_cls::bin_ns:
+				if(!has_l || !has_r){
+					break;
+				}
+
+				if( eff_l && l_operand && gap_before(i) > 0 ){
+					out.push_back({ row, t.col, "8.3", "no space before '.','->','.*','->*'" });
+				}
+
+				if( eff_r && r_operand && gap_after(i) > 0 ){
+					out.push_back(
+						{ row, t.col + t.len, "8.3", "no space after '.','->','.*','->*'" }
+					);
+				}
+
+				break;
+			case Tk_cls::bin_s:
+				if( eff_l && l_operand && gap_before(i) == 0 ){
+					out.push_back({ row, t.col, "8.3", "space required before binary operator" });
+				}
+
+				if( eff_r && r_operand && gap_after(i) == 0 ){
+					out.push_back(
+						{ row, t.col + t.len, "8.3", "space required after binary operator" }
+					);
+				}
+
+				break;
+			case Tk_cls::inc_dec:
+				if( eff_l && eff_r && gap_before(i) > 0 && gap_after(i) > 0 ){
+					out.push_back({ row, t.col, "8.3", "'++'/'--' must attach to operand" });
+				}
+
+				break;
+			default:
+				break;
+		}
 	}
 }
 
@@ -685,7 +1071,8 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		::Check_ctrl_brace(mask, row, out);
 		::Check_word_paren_space(mask[row], row, out);
 		::Check_word_paren_newline(mask, row, out);
-		::Check_blank_line(lines, row, out);
+		::Check_blank_line(lines, mask, row, out);
+		::Check_token_space(mask[row], row, out);
 		::Check_banned(mask[row], row, out);
 	}
 
