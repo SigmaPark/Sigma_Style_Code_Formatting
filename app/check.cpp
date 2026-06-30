@@ -1403,6 +1403,297 @@ static void Check_anchor_return_throw(
 	}
 }
 
+// 다음 코드 행을 찾고, 그 들여쓰기 ≥ cur+1 이 아니면 §5.5 위반으로 기록.
+static void Push_anchor_indent_check(
+	Lines const &lines, Lines const &mask, int const cur_row, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+	int nr = cur_row + 1;
+
+	while(nr < rows){
+		if( !lines[nr].empty() && ::Has_code(mask[nr]) ){
+			break;
+		}
+
+		++nr;
+	}
+
+	if(nr >= rows){
+		return;
+	}
+
+	int const cur = ::Indent_depth(lines[cur_row]);
+
+	if( ::Indent_depth(lines[nr]) < cur + 1 ){
+		out.push_back({ nr, 0, "5.5", "virtual bracket: continuation underindented" });
+	}
+}
+
+// §5.5 후행반환 `->` 가상괄호.
+// `->` 직전 비공백이 `)` 이면 후행반환 자리로 본다. 같은 행에 `{` 또는 `;` 가 (괄호 깊이 0)
+// 없으면 다중행 가상괄호 발현 — 다음 코드 행 들여쓰기 ≥ `->` 행 +1.
+static void Check_anchor_trailing_return(
+	Lines const &lines, Lines const &mask, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	for(int r = 0; r < rows; ++r){
+		std::string const &m = mask[r];
+		int const n = static_cast<int>(m.size());
+
+		for(int c = 0; c + 1 < n; ++c){
+			if(m[c] != '-' || m[c + 1] != '>'){
+				continue;
+			}
+
+			int p = c - 1;
+
+			while( p >= 0 && (m[p] == ' ' || m[p] == '\t' || m[p] == '@') ){
+				--p;
+			}
+
+			bool trailing = false;
+
+			if(p >= 0){
+				trailing = m[p] == ')';
+			} else{
+				// `->` 가 행 시작 — 이전 코드 행 마지막 비공백 토큰을 본다.
+				int pr = r - 1;
+
+				while(pr >= 0){
+					std::string const &pm = mask[pr];
+					int pc = static_cast<int>(pm.size()) - 1;
+
+					while( pc >= 0 && (pm[pc] == ' ' || pm[pc] == '\t' || pm[pc] == '@') ){
+						--pc;
+					}
+
+					if(pc >= 0){
+						trailing = pm[pc] == ')';
+
+						break;
+					}
+
+					--pr;
+				}
+			}
+
+			if(!trailing){
+				continue;
+			}
+
+			int depth = 0, cc = c + 2;
+			bool found = false;
+
+			while(cc < n){
+				char const ch = m[cc];
+
+				if(ch == '{' && depth == 0){
+					found = true;
+
+					break;
+				}
+
+				if(ch == '(' || ch == '[' || ch == '{'){
+					++depth;
+				} else if(ch == ')' || ch == ']' || ch == '}'){
+					--depth;
+				} else if(ch == ';' && depth == 0){
+					found = true;
+
+					break;
+				}
+
+				++cc;
+			}
+
+			if(found){
+				continue;
+			}
+
+			::Push_anchor_indent_check(lines, mask, r, out);
+		}
+	}
+}
+
+// `}` 의 짝 `{` 직전(혹은 그 직전 식별자 직전)이 struct/class/union/enum 인지 확인.
+static auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
+	if(p.kind != '{'){
+		return false;
+	}
+
+	std::string const &m_o = mask[p.o_row];
+	int q = p.o_col - 1;
+
+	while( q >= 0 && (m_o[q] == ' ' || m_o[q] == '\t' || m_o[q] == '@') ){
+		--q;
+	}
+
+	if( q < 0 || !::is_word_char(m_o[q]) ){
+		return false;
+	}
+
+	int s = q;
+
+	while( s >= 0 && ::is_word_char(m_o[s]) ){
+		--s;
+	}
+
+	std::string const w = m_o.substr(s + 1, q - s);
+
+	if(w == "struct" || w == "class" || w == "union" || w == "enum"){
+		return true;
+	}
+
+	int q2 = s;
+
+	while( q2 >= 0 && (m_o[q2] == ' ' || m_o[q2] == '\t' || m_o[q2] == '@') ){
+		--q2;
+	}
+
+	if( q2 < 0 || !::is_word_char(m_o[q2]) ){
+		return false;
+	}
+
+	int s2 = q2;
+
+	while( s2 >= 0 && ::is_word_char(m_o[s2]) ){
+		--s2;
+	}
+
+	std::string const w2 = m_o.substr(s2 + 1, q2 - s2);
+
+	return w2 == "struct" || w2 == "class" || w2 == "union" || w2 == "enum";
+}
+
+// §5.5 인라인 타입 정의 가상괄호 — `struct{…}『var…』;` 패턴.
+// 매처 결과의 `{ }` 짝 중 인라인 타입 정의의 close 인 것을 골라, close `}` 가 행 마지막이고
+// 다음 코드 행이 식별자로 시작하면 다중행 가상괄호 발현 — 다음 코드 행 들여쓰기 ≥ `}` 행 +1.
+static void Check_anchor_inline_type(
+	Lines const &lines, Lines const &mask,
+	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	for(Bk_pair const &p : pairs){
+		if( !::Is_inline_type_close(mask, p) ){
+			continue;
+		}
+
+		std::string const &m_c = mask[p.c_row];
+		int const end = p.c_col + p.c_len, c_n = static_cast<int>(m_c.size());
+		bool last_token = true;
+
+		for(int cc = end; cc < c_n; ++cc){
+			if( ::Is_code_char(m_c[cc]) ){
+				last_token = false;
+
+				break;
+			}
+		}
+
+		if(!last_token){
+			continue;
+		}
+
+		int nr = p.c_row + 1;
+
+		while(nr < rows){
+			if( !lines[nr].empty() && ::Has_code(mask[nr]) ){
+				break;
+			}
+
+			++nr;
+		}
+
+		if(nr >= rows){
+			continue;
+		}
+
+		std::string const &m_n = mask[nr];
+		int first = 0;
+		int const n_n = static_cast<int>(m_n.size());
+
+		while( first < n_n && (m_n[first] == ' ' || m_n[first] == '\t' || m_n[first] == '@') ){
+			++first;
+		}
+
+		if( first >= n_n || !::is_word_char(m_n[first]) ){
+			continue;
+		}
+
+		int const cur = ::Indent_depth(lines[p.c_row]);
+
+		if( ::Indent_depth(lines[nr]) < cur + 1 ){
+			out.push_back({ nr, 0, "5.5", "inline type: var-list underindented" });
+		}
+	}
+}
+
+// §5.5 case 라벨 가상괄호.
+// `case` 단어 같은 행에 (괄호 깊이 0, `::` 제외) `:` 없으면 다중행 발현 —
+// 다음 코드 행 들여쓰기 ≥ `case` 행 +1.
+static void Check_anchor_case(
+	Lines const &lines, Lines const &mask, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	for(int r = 0; r < rows; ++r){
+		std::string const &m = mask[r];
+		int const n = static_cast<int>(m.size());
+		int c = 0;
+
+		while(c < n){
+			if( !::Word_starts_at(m, c) ){
+				++c;
+
+				continue;
+			}
+
+			std::string const w = ::Word_at(m, c);
+			int const e = c + static_cast<int>(w.size());
+
+			if(w != "case"){
+				c = e;
+
+				continue;
+			}
+
+			int depth = 0, cc = e;
+			bool found = false;
+
+			while(cc < n){
+				char const ch = m[cc];
+
+				if(ch == '(' || ch == '[' || ch == '{'){
+					++depth;
+				} else if(ch == ')' || ch == ']' || ch == '}'){
+					--depth;
+				} else if(ch == ':' && depth == 0){
+					bool const is_scope
+						= (cc + 1 < n && m[cc + 1] == ':')
+						|| (cc > 0 && m[cc - 1] == ':')
+					;
+
+					if(!is_scope){
+						found = true;
+
+						break;
+					}
+				}
+
+				++cc;
+			}
+
+			if(!found){
+				::Push_anchor_indent_check(lines, mask, r, out);
+			}
+
+			c = e;
+		}
+	}
+}
+
 // §3 금지 키워드 typedef/goto (@마스크, 단어 경계).
 static void Check_banned(std::string const &mask, int const row, std::vector<Violation> &out){
 	static std::string const Banned[] = { "typedef", "goto" };
@@ -1441,6 +1732,9 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 
 	::Check_hidden_brace(lines, mask, pairs, out);
 	::Check_anchor_return_throw(lines, mask, out);
+	::Check_anchor_trailing_return(lines, mask, out);
+	::Check_anchor_inline_type(lines, mask, pairs, out);
+	::Check_anchor_case(lines, mask, out);
 
 	for(int row = 0; row < rows; ++row){
 		::Check_width(lines[row], row, out);
