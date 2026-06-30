@@ -617,6 +617,124 @@ static auto Indent_depth(std::string const &line)->int{
 	return p;
 }
 
+// 다중행 괄호 매처 (§5.4·§5.7).
+// 짝지은 괄호 한 쌍의 여닫는 위치와 종류. kind = '(', '{', '[', 'A'([[ ]]).
+struct Bk_pair{
+	int o_row, o_col, o_len;
+	int c_row, c_col, c_len;
+	char kind;
+};
+
+// @마스크 전체를 스캔해 ()/{}/[]/[[ ]] 짝을 모은다. 짝이 깨지면 그 자리는 버린다.
+// 단일행 빈 괄호(())/{}/[]/[[]]는 §5.1에 따라 괄호 표현이 아니므로 제외한다.
+// (다중행 빈 괄호는 거의 없으니 보수적으로 통과시킨다.)
+static auto Match_brackets(Lines const &mask)->std::vector<Bk_pair>{
+	std::vector<Bk_pair> out;
+
+	struct Frame{
+		int r, c, len;
+		char kind;
+	};
+
+	std::vector<Frame> st;
+	int const rows = static_cast<int>(mask.size());
+
+	for(int r = 0; r < rows; ++r){
+		std::string const &line = mask[r];
+		int const n = static_cast<int>(line.size());
+		int c = 0;
+
+		while(c < n){
+			char const ch = line[c];
+
+			if(ch == '[' && c + 1 < n && line[c + 1] == '['){
+				st.push_back({ r, c, 2, 'A' });
+				c += 2;
+
+				continue;
+			}
+
+			if(
+				ch == ']' && c + 1 < n && line[c + 1] == ']'
+				&& !st.empty() && st.back().kind == 'A'
+			){
+				Frame const f = st.back();
+				st.pop_back();
+
+				bool const same_line = f.r == r;
+				bool empty_pair = false;
+
+				if(same_line){
+					empty_pair = true;
+
+					for(int cc = f.c + f.len; cc < c; ++cc){
+						char const ic = line[cc];
+
+						if(ic != ' ' && ic != '\t' && ic != '@'){
+							empty_pair = false;
+
+							break;
+						}
+					}
+				}
+
+				if(!empty_pair){
+					out.push_back({ f.r, f.c, f.len, r, c, 2, 'A' });
+				}
+
+				c += 2;
+
+				continue;
+			}
+
+			if(ch == '(' || ch == '{' || ch == '['){
+				st.push_back({ r, c, 1, ch });
+				++c;
+
+				continue;
+			}
+
+			if(ch == ')' || ch == '}' || ch == ']'){
+				char const want = ch == ')' ? '(' : ch == '}' ? '{' : '[';
+
+				if(!st.empty() && st.back().kind == want){
+					Frame const f = st.back();
+					st.pop_back();
+
+					bool const same_line = f.r == r;
+					bool empty_pair = false;
+
+					if(same_line){
+						empty_pair = true;
+
+						for(int cc = f.c + f.len; cc < c; ++cc){
+							char const ic = line[cc];
+
+							if(ic != ' ' && ic != '\t' && ic != '@'){
+								empty_pair = false;
+
+								break;
+							}
+						}
+					}
+
+					if(!empty_pair){
+						out.push_back({ f.r, f.c, f.len, r, c, 1, want });
+					}
+				}
+
+				++c;
+
+				continue;
+			}
+
+			++c;
+		}
+	}
+
+	return out;
+}
+
 // 마스크상 코드 토큰을 하나라도 포함하는 행인지(전처리기·주석·문자열 only 는 false).
 static auto Has_code(std::string const &mask_row)->bool{
 	for(char const c : mask_row){
@@ -859,29 +977,29 @@ static auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
 
 		// 1-char 기호형
 		switch(c){
-			case ';':
-			case ',':
-				out.push_back({ i, 1, Tk_cls::sep });
+		case ';':
+		case ',':
+			out.push_back({ i, 1, Tk_cls::sep });
 
-				break;
-			case '.':
-				out.push_back({ i, 1, Tk_cls::bin_ns });
+			break;
+		case '.':
+			out.push_back({ i, 1, Tk_cls::bin_ns });
 
-				break;
-			case '?':
-			case '=':
-			case '/':
-			case '%':
-			case '|':
-			case '^':
-				out.push_back({ i, 1, Tk_cls::bin_s });
+			break;
+		case '?':
+		case '=':
+		case '/':
+		case '%':
+		case '|':
+		case '^':
+			out.push_back({ i, 1, Tk_cls::bin_s });
 
-				break;
-			default:
-				// * & + - < > : ! ~ 등 분류 의존 토큰은 모두 skip.
-				out.push_back({ i, 1, Tk_cls::skip });
+			break;
+		default:
+			// * & + - < > : ! ~ 등 분류 의존 토큰은 모두 skip.
+			out.push_back({ i, 1, Tk_cls::skip });
 
-				break;
+			break;
 		}
 
 		++i;
@@ -968,66 +1086,319 @@ static void Check_token_space(
 		bool const r_operand = right_cls == Tk_cls::word || right_cls == Tk_cls::open_b;
 
 		switch(t.cls){
-			case Tk_cls::sep:{
-				// `for(init;;++itr2)` 처럼 `;` 두 개가 연속하면 그 사이는 공백 1 필수
-				// (spec §8.3 SEP 항 예외). `,` 끼리·`,`+`;` 혼합은 일반 SEP 룰을 그대로 따른다.
-				bool const
-					semi_chain
-					= t.len == 1 && mask[t.col] == ';'
-					&& has_l && toks[i - 1].cls == Tk_cls::sep
-					&& toks[i - 1].len == 1 && mask[ toks[i - 1].col ] == ';'
-				;
+		case Tk_cls::sep:{
+			// `for(init;;++itr2)` 처럼 `;` 두 개가 연속하면 그 사이는 공백 1 필수
+			// (spec §8.3 SEP 항 예외). `,` 끼리·`,`+`;` 혼합은 일반 SEP 룰을 그대로 따른다.
+			bool const
+				semi_chain
+				= t.len == 1 && mask[t.col] == ';'
+				&& has_l && toks[i - 1].cls == Tk_cls::sep
+				&& toks[i - 1].len == 1 && mask[ toks[i - 1].col ] == ';'
+			;
 
-				if( eff_l && !semi_chain && gap_before(i) > 0 ){
-					out.push_back({ row, t.col, "8.3", "no space before separator" });
-				}
+			if( eff_l && !semi_chain && gap_before(i) > 0 ){
+				out.push_back({ row, t.col, "8.3", "no space before separator" });
+			}
 
-				if( eff_l && semi_chain && gap_before(i) == 0 ){
-					out.push_back({ row, t.col, "8.3", "space required between consecutive ';'" });
-				}
+			if( eff_l && semi_chain && gap_before(i) == 0 ){
+				out.push_back({ row, t.col, "8.3", "space required between consecutive ';'" });
+			}
 
-				if( eff_r && right_cls != Tk_cls::sep && gap_after(i) == 0 ){
-					out.push_back({ row, t.col + t.len, "8.3", "space required after separator" });
-				}
+			if( eff_r && right_cls != Tk_cls::sep && gap_after(i) == 0 ){
+				out.push_back({ row, t.col + t.len, "8.3", "space required after separator" });
+			}
 
+			break;
+		}
+		case Tk_cls::bin_ns:
+			if(!has_l || !has_r){
 				break;
 			}
-			case Tk_cls::bin_ns:
-				if(!has_l || !has_r){
+
+			if( eff_l && l_operand && gap_before(i) > 0 ){
+				out.push_back({ row, t.col, "8.3", "no space before '.','->','.*','->*'" });
+			}
+
+			if( eff_r && r_operand && gap_after(i) > 0 ){
+				out.push_back(
+					{ row, t.col + t.len, "8.3", "no space after '.','->','.*','->*'" }
+				);
+			}
+
+			break;
+		case Tk_cls::bin_s:
+			if( eff_l && l_operand && gap_before(i) == 0 ){
+				out.push_back({ row, t.col, "8.3", "space required before binary operator" });
+			}
+
+			if( eff_r && r_operand && gap_after(i) == 0 ){
+				out.push_back(
+					{ row, t.col + t.len, "8.3", "space required after binary operator" }
+				);
+			}
+
+			break;
+		case Tk_cls::inc_dec:
+			if( eff_l && eff_r && gap_before(i) > 0 && gap_after(i) > 0 ){
+				out.push_back({ row, t.col, "8.3", "'++'/'--' must attach to operand" });
+			}
+
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+// 마스크 한 행에서 col 위치에 코드 토큰이 있는지(공백·탭·@가 아니면 코드).
+static auto Is_code_char(char const ch)->bool{
+	return ch != ' ' && ch != '\t' && ch != '@';
+}
+
+// §5.4 다중행 괄호의 위치·들여쓰기 검사.
+// (1) 여닫는 행 들여쓰기 동일, (2) 여는 괄호 다음 같은 행에 코드 토큰 없음(행 끝),
+// (3) 닫는 괄호 직전 같은 행에 코드 토큰 없음(행 처음), (4) 중간 코드 행의 들여쓰기 ≥ 외곽+1.
+static void Check_multiline_bracket(
+	Lines const &lines, Lines const &mask, Bk_pair const &p,
+	std::vector<Violation> &out
+){
+	if(p.o_row == p.c_row){
+		return;
+	}
+
+	// (1) 여닫는 행 들여쓰기 동일
+	int const o_ind = ::Indent_depth(lines[p.o_row]);
+	int const c_ind = ::Indent_depth(lines[p.c_row]);
+
+	if(o_ind != c_ind){
+		out.push_back({ p.c_row, 0, "5.4", "open/close indent differ" });
+	}
+
+	// (2) 여는 괄호가 행 마지막 코드 토큰인지
+	std::string const &o_line = mask[p.o_row];
+	int const o_n = static_cast<int>(o_line.size()), o_end = p.o_col + p.o_len;
+
+	for(int cc = o_end; cc < o_n; ++cc){
+		if( ::Is_code_char(o_line[cc]) ){
+			out.push_back({ p.o_row, cc, "5.4", "opening bracket not last token" });
+
+			break;
+		}
+	}
+
+	// (3) 닫는 괄호가 행 첫 코드 토큰인지
+	std::string const &c_line = mask[p.c_row];
+
+	for(int cc = 0; cc < p.c_col; ++cc){
+		if( ::Is_code_char(c_line[cc]) ){
+			out.push_back({ p.c_row, cc, "5.4", "closing bracket not first token" });
+
+			break;
+		}
+	}
+
+	// (4) 중간 코드 행 들여쓰기 ≥ 외곽+1.
+	// 단 §5.6 숨은 중괄호로 닫혔다 열리는 자리 — case/default/public/private/protected —
+	// 는 외곽과 같은 들여쓰기가 정상이므로 검사 제외한다.
+	for(int r = p.o_row + 1; r < p.c_row; ++r){
+		if( lines[r].empty() || !::Has_code(mask[r]) ){
+			continue;
+		}
+
+		int const ind = ::Indent_depth(lines[r]);
+
+		std::string const &m = mask[r];
+		int first = 0;
+		int const m_n = static_cast<int>(m.size());
+
+		while( first < m_n && (m[first] == ' ' || m[first] == '\t' || m[first] == '@') ){
+			++first;
+		}
+
+		std::string const head = first < m_n ? ::Word_at(m, first) : "";
+		bool const hidden_close
+			= head == "case" || head == "default"
+			|| head == "public" || head == "private" || head == "protected"
+		;
+
+		// §5.6 숨은 중괄호 자리(case/default/접근지정자)는 +1 룰을 적용하지 않는다.
+		// 들여쓰기는 가장 안쪽 brace 와 비교해야 정확하므로 Check_hidden_brace 가 다룬다.
+		if(hidden_close){
+			continue;
+		}
+
+		// 첫 코드 토큰이 닫는 괄호이면 내부 짝의 close 라인이라 외곽 middle 검사에서 빠진다
+		// (자기 짝의 §5.4 검사에서 다룬다).
+		char const first_c = first < m_n ? m[first] : '\0';
+
+		if(first_c == ')' || first_c == ']' || first_c == '}'){
+			continue;
+		}
+
+		if(ind < o_ind + 1){
+			out.push_back({ r, 0, "5.4", "middle line indent insufficient" });
+		}
+	}
+}
+
+// §5.6 숨은 중괄호 — case/default/접근지정자(public/private/protected) 라인은
+// 그 라인을 *직접 둘러싼 가장 안쪽 `{ }` brace* 와 같은 들여쓰기여야 한다.
+// 외곽 함수 본체나 namespace 본체와의 들여쓰기는 비교 대상이 아니다.
+static void Check_hidden_brace(
+	Lines const &lines, Lines const &mask,
+	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	for(int r = 0; r < rows; ++r){
+		if( lines[r].empty() || !::Has_code(mask[r]) ){
+			continue;
+		}
+
+		std::string const &m = mask[r];
+		int first = 0;
+		int const m_n = static_cast<int>(m.size());
+
+		while( first < m_n && (m[first] == ' ' || m[first] == '\t' || m[first] == '@') ){
+			++first;
+		}
+
+		if(first >= m_n){
+			continue;
+		}
+
+		std::string const head = ::Word_at(m, first);
+		bool const is_hidden
+			= head == "case" || head == "default"
+			|| head == "public" || head == "private" || head == "protected"
+		;
+
+		if(!is_hidden){
+			continue;
+		}
+
+		Bk_pair const *inner = nullptr;
+
+		for(Bk_pair const &p : pairs){
+			if(p.kind != '{' || p.o_row >= r || p.c_row <= r){
+				continue;
+			}
+
+			if(!inner || p.o_row > inner->o_row){
+				inner = &p;
+			}
+		}
+
+		if(!inner){
+			continue;
+		}
+
+		int const r_ind = ::Indent_depth(lines[r]);
+		int const o_ind = ::Indent_depth(lines[inner->o_row]);
+
+		if(r_ind != o_ind){
+			out.push_back({ r, 0, "5.6", "hidden close: indent must equal enclosing brace" });
+		}
+	}
+}
+
+// §5.7 다중행 [[ ]] 의 닫는 ']]' 가 행 마지막 코드 토큰인지.
+static void Check_attribute_close(
+	Lines const &mask, Bk_pair const &p, std::vector<Violation> &out
+){
+	if(p.kind != 'A' || p.o_row == p.c_row){
+		return;
+	}
+
+	std::string const &c_line = mask[p.c_row];
+	int const c_n = static_cast<int>(c_line.size()), c_end = p.c_col + p.c_len;
+
+	for(int cc = c_end; cc < c_n; ++cc){
+		if( ::Is_code_char(c_line[cc]) ){
+			out.push_back({ p.c_row, cc, "5.7", "']]' not last token" });
+
+			break;
+		}
+	}
+}
+
+// §5.5 가상괄호 — return/throw 앵커.
+// 키워드 행 안에 (괄호 깊이 0 의) ';' 가 없으면 다중행 발현이라 보고,
+// 다음 코드 행의 들여쓰기가 키워드 행 + 1 이상인지 검사. 그 외 앵커(`->`·`case`·`:`·
+// 변수선언)는 의미적 판정이 더 필요해 단계 3 1차 영역 밖이다.
+static void Check_anchor_return_throw(
+	Lines const &lines, Lines const &mask, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	for(int r = 0; r < rows; ++r){
+		std::string const &m = mask[r];
+		int const n = static_cast<int>(m.size());
+		int c = 0;
+
+		while(c < n){
+			if( !::Word_starts_at(m, c) ){
+				++c;
+
+				continue;
+			}
+
+			std::string const w = ::Word_at(m, c);
+			int const e = c + static_cast<int>(w.size());
+
+			if(w != "return" && w != "throw"){
+				c = e;
+
+				continue;
+			}
+
+			int depth = 0, cc = e;
+			bool found = false;
+
+			while(cc < n){
+				char const ch = m[cc];
+
+				if(ch == '(' || ch == '[' || ch == '{'){
+					++depth;
+				} else if(ch == ')' || ch == ']' || ch == '}'){
+					--depth;
+				} else if(ch == ';' && depth == 0){
+					found = true;
+
 					break;
 				}
 
-				if( eff_l && l_operand && gap_before(i) > 0 ){
-					out.push_back({ row, t.col, "8.3", "no space before '.','->','.*','->*'" });
+				++cc;
+			}
+
+			if(found){
+				c = e;
+
+				continue;
+			}
+
+			int const cur = ::Indent_depth(lines[r]);
+			int nr = r + 1;
+
+			while(nr < rows){
+				if( !lines[nr].empty() && ::Has_code(mask[nr]) ){
+					break;
 				}
 
-				if( eff_r && r_operand && gap_after(i) > 0 ){
-					out.push_back(
-						{ row, t.col + t.len, "8.3", "no space after '.','->','.*','->*'" }
-					);
-				}
+				++nr;
+			}
 
-				break;
-			case Tk_cls::bin_s:
-				if( eff_l && l_operand && gap_before(i) == 0 ){
-					out.push_back({ row, t.col, "8.3", "space required before binary operator" });
-				}
+			if(nr >= rows){
+				c = e;
 
-				if( eff_r && r_operand && gap_after(i) == 0 ){
-					out.push_back(
-						{ row, t.col + t.len, "8.3", "space required after binary operator" }
-					);
-				}
+				continue;
+			}
 
-				break;
-			case Tk_cls::inc_dec:
-				if( eff_l && eff_r && gap_before(i) > 0 && gap_after(i) > 0 ){
-					out.push_back({ row, t.col, "8.3", "'++'/'--' must attach to operand" });
-				}
+			if( ::Indent_depth(lines[nr]) < cur + 1 ){
+				out.push_back({ nr, 0, "5.5", "virtual bracket: continuation underindented" });
+			}
 
-				break;
-			default:
-				break;
+			c = e;
 		}
 	}
 }
@@ -1060,6 +1431,16 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	std::vector<Violation> out;
 	Lines const mask = ::render_mask(lines, segs);
 	int const rows = static_cast<int>(lines.size());
+
+	std::vector<Bk_pair> const pairs = ::Match_brackets(mask);
+
+	for(Bk_pair const &p : pairs){
+		::Check_multiline_bracket(lines, mask, p, out);
+		::Check_attribute_close(mask, p, out);
+	}
+
+	::Check_hidden_brace(lines, mask, pairs, out);
+	::Check_anchor_return_throw(lines, mask, out);
 
 	for(int row = 0; row < rows; ++row){
 		::Check_width(lines[row], row, out);
