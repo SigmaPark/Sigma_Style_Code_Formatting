@@ -781,6 +781,152 @@ static void Check_blank_line(
 	}
 }
 
+// 마스크 행의 첫 코드 문자.
+static auto First_code_char(std::string const &mask_line)->char{
+	int const n = static_cast<int>(mask_line.size());
+
+	for(int i = 0; i < n; ++i){
+		char const c = mask_line[i];
+
+		if(c != ' ' && c != '\t' && c != '@'){
+			return c;
+		}
+	}
+
+	return '\0';
+}
+
+// 마스크 행의 마지막 코드 문자.
+static auto Last_code_char(std::string const &mask_line)->char{
+	for( int i = static_cast<int>(mask_line.size()) - 1; i >= 0; --i ){
+		char const c = mask_line[i];
+
+		if(c != ' ' && c != '\t' && c != '@'){
+			return c;
+		}
+	}
+
+	return '\0';
+}
+
+// 마스크 행이 특정 키워드로 시작하는지(그 뒤가 단어경계).
+static auto Starts_with_keyword(std::string const &mask_line, char const *kw)->bool{
+	int const n = static_cast<int>(mask_line.size());
+	int i = 0;
+
+	while( i < n && (mask_line[i] == ' ' || mask_line[i] == '\t' || mask_line[i] == '@') ){
+		++i;
+	}
+
+	int const kl = static_cast<int>( std::string(kw).size() );
+
+	if(i + kl > n){
+		return false;
+	}
+
+	if( mask_line.compare(i, kl, kw) != 0 ){
+		return false;
+	}
+
+	int const nxt = i + kl;
+
+	return nxt >= n || !::is_word_char(mask_line[nxt]);
+}
+
+// 이항·삼항 연산자·구두점으로 시작하는 행 — 이전 표현식의 연장.
+static auto Starts_with_continuation_op(std::string const &mask_line)->bool{
+	char const c = ::First_code_char(mask_line);
+
+	return
+		c == '=' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%'
+		|| c == '&' || c == '|' || c == '^' || c == '<' || c == '>' || c == '!'
+		|| c == '~' || c == '?' || c == ':' || c == ',' || c == '.'
+	;
+}
+
+// 닫는 괄호 뒤 같은 행에 세미콜론 아닌 코드 토큰이 남아 있는지(표현식 종속의 증거).
+// `}(p),` `}.method()` `}` +쉼표 같은 자리는 문장 종결이 아니므로 아래쪽 공행 요구 유보.
+static auto Has_nonsemi_code_after(std::string const &mask_line, int const pos)->bool{
+	int const n = static_cast<int>(mask_line.size());
+
+	for(int i = pos; i < n; ++i){
+		char const c = mask_line[i];
+
+		if(c == ' ' || c == '\t' || c == '@'){
+			continue;
+		}
+
+		if(c == ';'){
+			return false;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+// §9.4 확장 — 다중행 괄호(세미콜론 제외)가 형성한 개행 경쟁 범위(여는 행·닫는 행)의
+// 바로 위·아래 인접행은 공행이어야 한다. 단 그 자리에 공행을 두어도 §9.4 유효성
+// (인접 두 코드행의 들여쓰기 일치)이 성립할 때만 요구한다.
+// 판정 기준 — "이 자리가 실제 문장 경계인가":
+//   위쪽 — 인접 위 행의 마지막 코드 문자가 `;` 또는 `}` 여야 하며(문장 종결),
+//   여는 행이 이항 연산자로 시작하거나 `else`/`catch` 로 시작하면 이전 문장의 연장이라 유보.
+//   아래쪽 — 닫는 행에 `;` 아닌 코드가 남거나(표현식 종속),
+//   인접 아래 행이 이항 연산자·`else`/`catch`/`while` 로 시작하면 유보.
+static void Check_bracket_blank_line(
+	Lines const &lines, Lines const &mask, Bk_pair const &p, std::vector<Violation> &out
+){
+	if(p.o_row == p.c_row){
+		return;
+	}
+
+	int const rows = static_cast<int>(lines.size());
+	int const o_ind = ::Indent_depth(lines[p.o_row]);
+	int const c_ind = ::Indent_depth(lines[p.c_row]);
+
+	if(p.o_row > 0){
+		int const nr = p.o_row - 1;
+		std::string const &above = mask[nr];
+
+		if( !lines[nr].empty() && ::Has_code(above) && ::Indent_depth(lines[nr]) == o_ind ){
+			char const above_last = ::Last_code_char(above);
+
+			bool const
+				at_stmt_boundary
+				= (above_last == ';' || above_last == '}')
+				&& !::Starts_with_continuation_op(mask[p.o_row])
+				&& !::Starts_with_keyword(mask[p.o_row], "else")
+				&& !::Starts_with_keyword(mask[p.o_row], "catch")
+			;
+
+			if(at_stmt_boundary){
+				out.push_back({ p.o_row, 0, "9.4", "missing blank line above multi-line bracket" });
+			}
+		}
+	}
+
+	if(p.c_row + 1 < rows){
+		int const nr = p.c_row + 1;
+		std::string const &below = mask[nr];
+
+		if( !lines[nr].empty() && ::Has_code(below) && ::Indent_depth(lines[nr]) == c_ind ){
+			bool const
+				at_stmt_boundary
+				= !::Has_nonsemi_code_after(mask[p.c_row], p.c_col + p.c_len)
+				&& !::Starts_with_continuation_op(below)
+				&& !::Starts_with_keyword(below, "else")
+				&& !::Starts_with_keyword(below, "catch")
+				&& !::Starts_with_keyword(below, "while")
+			;
+
+			if(at_stmt_boundary){
+				out.push_back({ p.c_row, 0, "9.4", "missing blank line below multi-line bracket" });
+			}
+		}
+	}
+}
+
 // 문맥 불변 토큰 분류 (§8.3 단계 2 — 분류가 모양만으로 결정되는 것만).
 // 문맥 의존 토큰(* & + - < > : && ! ~ 등)과 분류 모호(<< >> ::)는 모두 skip.
 enum class Tk_cls{
@@ -1364,26 +1510,72 @@ static void Check_anchor_return_throw(
 				continue;
 			}
 
-			int depth = 0, cc = e;
-			bool found = false;
+			// (r, e) 부터 행을 넘어가며 깊이 추적으로 짝 ; 를 찾는다.
+			int depth = 0;
+			int close_row = -1, close_col = -1;
 
-			while(cc < n){
-				char const ch = m[cc];
+			for(int rr = r; rr < rows && close_row < 0; ++rr){
+				std::string const &cm = mask[rr];
+				int const cn = static_cast<int>(cm.size());
+				int const start = rr == r ? e : 0;
 
-				if(ch == '(' || ch == '[' || ch == '{'){
-					++depth;
-				} else if(ch == ')' || ch == ']' || ch == '}'){
-					--depth;
-				} else if(ch == ';' && depth == 0){
-					found = true;
+				for(int cc = start; cc < cn; ++cc){
+					char const ch = cm[cc];
+
+					if(ch == '(' || ch == '[' || ch == '{'){
+						++depth;
+					} else if(ch == ')' || ch == ']' || ch == '}'){
+						--depth;
+					} else if(ch == ';' && depth == 0){
+						close_row = rr;
+						close_col = cc;
+
+						break;
+					}
+				}
+			}
+
+			// 같은 행에서 ; 를 찾았으면 단일행 return/throw — 가상괄호 미발현.
+			if(close_row == r){
+				c = e;
+
+				continue;
+			}
+
+			// (a) 여는 키워드는 행 마지막 코드 토큰이어야 한다.
+			bool keyword_last = true;
+
+			for(int cc = e; cc < n; ++cc){
+				if( ::Is_code_char(m[cc]) ){
+					keyword_last = false;
+
+					out.push_back(
+						{ r, cc, "5.5", "return/throw: keyword not last token on line" }
+					);
 
 					break;
 				}
-
-				++cc;
 			}
 
-			if(found){
+			if(close_row >= 0){
+				std::string const &cm = mask[close_row];
+
+				for(int cc = 0; cc < close_col; ++cc){
+					if( ::Is_code_char(cm[cc]) ){
+						out.push_back(
+							{ close_row, cc, "5.5", "return/throw: ';' not first token on line" }
+						);
+
+						break;
+					}
+				}
+			}
+
+			// 여는 키워드가 행 마지막일 때에만 다음 행 들여쓰기를 검사한다.
+			// (키워드 뒤에 표현식이 이어지는 형태는 위 (a) 가 이미 잡았고,
+			//  그 경우 "다음 코드 행"이 가상괄호 내용의 첫 행이 아니라
+			//  중간 괄호의 닫는 행이 될 수 있어 위양성 위험.)
+			if(!keyword_last){
 				c = e;
 
 				continue;
@@ -1833,6 +2025,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	for(Bk_pair const &p : pairs){
 		::Check_multiline_bracket(lines, mask, p, out);
 		::Check_attribute_close(mask, p, out);
+		::Check_bracket_blank_line(lines, mask, p, out);
 	}
 
 	::Check_hidden_brace(lines, mask, pairs, out);
