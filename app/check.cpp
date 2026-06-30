@@ -1027,7 +1027,8 @@ static void Check_token_space(
 		return;
 	}
 
-	auto gap_before
+	auto const
+		gap_before
 		= [&mask, &toks](int const i)->int{
 			int g = 0;
 
@@ -1039,7 +1040,8 @@ static void Check_token_space(
 		}
 	;
 
-	auto gap_after
+	auto const
+		gap_after
 		= [&mask, &toks, mask_n](int const i)->int{
 			int const e = toks[i].col + toks[i].len;
 			int g = 0;
@@ -1052,7 +1054,8 @@ static void Check_token_space(
 		}
 	;
 
-	auto word_eq
+	auto const
+		word_eq
 		= [&mask, &toks](int const i, char const *kw)->bool{
 			if(toks[i].cls != Tk_cls::word){
 				return false;
@@ -1071,45 +1074,52 @@ static void Check_token_space(
 	for(int i = 0; i < n; ++i){
 		Tok_8_3 const &t = toks[i];
 		bool const has_l = i > 0, has_r = i + 1 < n;
-		Tk_cls const left_cls = has_l ? toks[i - 1].cls : Tk_cls::skip;
-		Tk_cls const right_cls = has_r ? toks[i + 1].cls : Tk_cls::skip;
+
+		Tk_cls const
+			left_cls = has_l ? toks[i - 1].cls : Tk_cls::skip,
+			right_cls = has_r ? toks[i + 1].cls : Tk_cls::skip
+		;
 
 		// `operator =`·`operator ==`·`operator,` 등: `operator` 키워드 뒤 첫 기호형은
 		// 오버로드 함수명의 일부이므로 §8.3 검사 영역 밖이다.
 		if( has_l && word_eq(i - 1, "operator") ){
 			continue;
 		}
+
 		// 투명성: 좌측 open_b·우측 close_b 는 인접 토큰으로 보지 않는다.
-		bool const eff_l = has_l && left_cls != Tk_cls::open_b;
-		bool const eff_r = has_r && right_cls != Tk_cls::close_b;
-		bool const l_operand = left_cls == Tk_cls::word || left_cls == Tk_cls::close_b;
-		bool const r_operand = right_cls == Tk_cls::word || right_cls == Tk_cls::open_b;
+		bool const
+			eff_l = has_l && left_cls != Tk_cls::open_b,
+			eff_r = has_r && right_cls != Tk_cls::close_b,
+			l_operand = left_cls == Tk_cls::word || left_cls == Tk_cls::close_b,
+			r_operand = right_cls == Tk_cls::word || right_cls == Tk_cls::open_b
+		;
 
 		switch(t.cls){
-		case Tk_cls::sep:{
-			// `for(init;;++itr2)` 처럼 `;` 두 개가 연속하면 그 사이는 공백 1 필수
-			// (spec §8.3 SEP 항 예외). `,` 끼리·`,`+`;` 혼합은 일반 SEP 룰을 그대로 따른다.
-			bool const
-				semi_chain
-				= t.len == 1 && mask[t.col] == ';'
-				&& has_l && toks[i - 1].cls == Tk_cls::sep
-				&& toks[i - 1].len == 1 && mask[ toks[i - 1].col ] == ';'
-			;
+		case Tk_cls::sep:
+			{
+				// `for(init;;++itr2)` 처럼 `;` 두 개가 연속하면 그 사이는 공백 1 필수
+				// (spec §8.3 SEP 항 예외). `,` 끼리·`,`+`;` 혼합은 일반 SEP 룰을 그대로 따른다.
+				bool const
+					semi_chain
+					= t.len == 1 && mask[t.col] == ';'
+					&& has_l && toks[i - 1].cls == Tk_cls::sep
+					&& toks[i - 1].len == 1 && mask[ toks[i - 1].col ] == ';'
+				;
 
-			if( eff_l && !semi_chain && gap_before(i) > 0 ){
-				out.push_back({ row, t.col, "8.3", "no space before separator" });
-			}
+				if( eff_l && !semi_chain && gap_before(i) > 0 ){
+					out.push_back({ row, t.col, "8.3", "no space before separator" });
+				}
 
-			if( eff_l && semi_chain && gap_before(i) == 0 ){
-				out.push_back({ row, t.col, "8.3", "space required between consecutive ';'" });
-			}
+				if( eff_l && semi_chain && gap_before(i) == 0 ){
+					out.push_back({ row, t.col, "8.3", "space required between consecutive ';'" });
+				}
 
-			if( eff_r && right_cls != Tk_cls::sep && gap_after(i) == 0 ){
-				out.push_back({ row, t.col + t.len, "8.3", "space required after separator" });
+				if( eff_r && right_cls != Tk_cls::sep && gap_after(i) == 0 ){
+					out.push_back({ row, t.col + t.len, "8.3", "space required after separator" });
+				}
 			}
 
 			break;
-		}
 		case Tk_cls::bin_ns:
 			if(!has_l || !has_r){
 				break;
@@ -1167,8 +1177,7 @@ static void Check_multiline_bracket(
 	}
 
 	// (1) 여닫는 행 들여쓰기 동일
-	int const o_ind = ::Indent_depth(lines[p.o_row]);
-	int const c_ind = ::Indent_depth(lines[p.c_row]);
+	int const o_ind = ::Indent_depth(lines[p.o_row]), c_ind = ::Indent_depth(lines[p.c_row]);
 
 	if(o_ind != c_ind){
 		out.push_back({ p.c_row, 0, "5.4", "open/close indent differ" });
@@ -1216,7 +1225,9 @@ static void Check_multiline_bracket(
 		}
 
 		std::string const head = first < m_n ? ::Word_at(m, first) : "";
-		bool const hidden_close
+
+		bool const
+			hidden_close
 			= head == "case" || head == "default"
 			|| head == "public" || head == "private" || head == "protected"
 		;
@@ -1268,7 +1279,9 @@ static void Check_hidden_brace(
 		}
 
 		std::string const head = ::Word_at(m, first);
-		bool const is_hidden
+
+		bool const
+			is_hidden
 			= head == "case" || head == "default"
 			|| head == "public" || head == "private" || head == "protected"
 		;
@@ -1293,8 +1306,7 @@ static void Check_hidden_brace(
 			continue;
 		}
 
-		int const r_ind = ::Indent_depth(lines[r]);
-		int const o_ind = ::Indent_depth(lines[inner->o_row]);
+		int const r_ind = ::Indent_depth(lines[r]), o_ind = ::Indent_depth(lines[inner->o_row]);
 
 		if(r_ind != o_ind){
 			out.push_back({ r, 0, "5.6", "hidden close: indent must equal enclosing brace" });
@@ -1670,9 +1682,9 @@ static void Check_anchor_case(
 				} else if(ch == ')' || ch == ']' || ch == '}'){
 					--depth;
 				} else if(ch == ':' && depth == 0){
-					bool const is_scope
-						= (cc + 1 < n && m[cc + 1] == ':')
-						|| (cc > 0 && m[cc - 1] == ':')
+					bool const
+						is_scope
+						= (cc + 1 < n && m[cc + 1] == ':') || (cc > 0 && m[cc - 1] == ':')
 					;
 
 					if(!is_scope){
@@ -1716,6 +1728,99 @@ static void Check_banned(std::string const &mask, int const row, std::vector<Vio
 		}
 	}
 }
+
+// §3 키워드 위치 후보 — 기본 타입 키워드(닫힌 집합).
+static auto is_basic_type(std::string const &w)->bool{
+	static char const * const
+		Types[]
+		= {
+			"void", "bool", "char", "char8_t", "char16_t", "char32_t", "wchar_t",
+			"short", "int", "long", "float", "double", "signed", "unsigned", "auto"
+		}
+	;
+
+	for(char const * const t : Types){
+		if(w == t){
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// 토큰 t 의 @마스크상 텍스트.
+static auto Token_text(std::string const &mask, Tok_8_3 const &t)->std::string{
+	return mask.substr(t.col, t.len);
+}
+
+// §3 키워드 위치 — const/volatile/constexpr 후위, static/inline 전위 (@마스크, 단일행).
+// 무위양성 유지를 위해 *기본 타입 키워드와 인접한* 자동 확정분만 잡는다(사용자 정의 타입
+// 인접·다중행 선언은 서브에이전트 몫).
+//   `const|volatile|constexpr` + 기본타입  → 한정자가 타입 앞 = 서향 위반.
+//   기본타입 + `static|inline`             → 스토리지 지정자가 타입 뒤 = 위반.
+// `if constexpr` 는 constexpr 뒤가 '(' 라 단어쌍이 아니어서 자연히 제외된다.
+static void Check_keyword_position(
+	std::string const &mask, int const row, std::vector<Violation> &out
+){
+	auto const toks = ::Tokenize_8_3(mask);
+	int const n = static_cast<int>(toks.size());
+
+	for(int i = 0; i + 1 < n; ++i){
+		if(toks[i].cls != Tk_cls::word || toks[i + 1].cls != Tk_cls::word){
+			continue;
+		}
+
+		std::string const w0 = ::Token_text(mask, toks[i]), w1 = ::Token_text(mask, toks[i + 1]);
+		bool const qual0 = w0 == "const" || w0 == "volatile" || w0 == "constexpr";
+		bool const stor1 = w1 == "static" || w1 == "inline";
+
+		if( qual0 && ::is_basic_type(w1) ){
+			out.push_back(
+				{ row, toks[i].col, "3", "const/volatile/constexpr must follow its type" }
+			);
+		} else if( ::is_basic_type(w0) && stor1 ){
+			out.push_back({ row, toks[i + 1].col, "3", "static/inline must precede its type" });
+		}
+	}
+}
+
+// §3 단항 연산자 병기 — `- -x`/`+ +x` 처럼 같은 단항 부호가 공백으로 갈린 자리 (@마스크, 단일행).
+// 붙이면 `--`/`++` 가 되어 의미가 바뀌므로 괄호로 구분해야 한다(`-(-x)`).
+// 첫 부호가 단항임이 어휘적으로 확실한 자리(직전이 여는괄호·구분자·양쪽공백 이항연산자)에서만
+// 확정한다. 직전이 피연산자(식별자·닫는괄호 등)면 이항일 수 있어 서브에이전트 몫.
+static void Check_unary_juxtaposition(
+	std::string const &mask, int const row, std::vector<Violation> &out
+){
+	auto const toks = ::Tokenize_8_3(mask);
+	int const n = static_cast<int>(toks.size());
+
+	for(int i = 1; i + 1 < n; ++i){
+		char const sign = mask[ toks[i].col ];
+
+		bool const
+			same_unary_pair
+			= toks[i].len == 1 && toks[i + 1].len == 1
+			&& (sign == '-' || sign == '+') && mask[ toks[i + 1].col ] == sign
+		;
+
+		if(!same_unary_pair){
+			continue;
+		}
+
+		Tk_cls const left = toks[i - 1].cls;
+
+		bool const
+			first_is_unary
+			= left == Tk_cls::open_b || left == Tk_cls::sep || left == Tk_cls::bin_s
+		;
+
+		if(first_is_unary){
+			out.push_back(
+				{ row, toks[i].col, "3", "unary operators need parentheses, not space" }
+			);
+		}
+	}
+}
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violation>{
@@ -1748,6 +1853,8 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		::Check_word_paren_newline(mask, row, out);
 		::Check_blank_line(lines, mask, row, out);
 		::Check_token_space(mask[row], row, out);
+		::Check_keyword_position(mask[row], row, out);
+		::Check_unary_juxtaposition(mask[row], row, out);
 		::Check_banned(mask[row], row, out);
 	}
 
