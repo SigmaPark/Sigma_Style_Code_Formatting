@@ -392,6 +392,30 @@ static auto Match_brace_back(Lines const &mask, int &row, int &col)->bool{
 	return false;
 }
 
+// (row,col)의 닫는 괄호 문자(close)에서 짝이 맞는 여는 괄호 문자(open)를 역방향으로
+// 찾는다. 찾으면 true 와 open 위치를 (row,col) 에 채운다. `)`↔`(`, `]`↔`[` 에 재사용.
+static auto Match_bracket_back(
+	Lines const &mask, char const open, char const close, int &row, int &col
+)->bool{
+	for(int depth = 0; row >= 0;){
+		for(; col >= 0; --col){
+			if(char const ch = mask[row][col]; ch == close){
+				++depth;
+			} else if(ch == open){
+				if(--depth == 0){
+					return true;
+				}
+			}
+		}
+
+		if(--row >= 0){
+			col = static_cast<int>(mask[row].size()) - 1;
+		}
+	}
+
+	return false;
+}
+
 // (row,col) 직전의 의미 토큰이 식별자면 그 식별자를, 아니면 빈 문자열을 돌려준다.
 static auto Word_before(Lines const &mask, int const row, int const col)->std::string{
 	int r = row, c = col - 1;
@@ -2392,6 +2416,42 @@ struct Angle_pair{
 	int c_row, c_col;
 };
 
+// Angle_pair 벡터를 위치 기준으로 정렬해 완전히 동일한 중복 쌍을 제거한다(여러 매처의
+// 결과를 병합할 때·중첩 template 안 static_cast 가 두 번 잡히는 자리를 정리).
+static void Dedup_angles(std::vector<Angle_pair> &v){
+	std::sort(
+		v.begin(), v.end(),
+		[](Angle_pair const &a, Angle_pair const &b)->bool{
+			if(a.o_row != b.o_row){
+				return a.o_row < b.o_row;
+			}
+
+			if(a.o_col != b.o_col){
+				return a.o_col < b.o_col;
+			}
+
+			if(a.c_row != b.c_row){
+				return a.c_row < b.c_row;
+			}
+
+			return a.c_col < b.c_col;
+		}
+	);
+
+	v.erase(
+		std::unique(
+			v.begin(), v.end(),
+			[](Angle_pair const &a, Angle_pair const &b)->bool{
+				return
+					a.o_row == b.o_row && a.o_col == b.o_col
+					&& a.c_row == b.c_row && a.c_col == b.c_col
+				;
+			}
+		),
+		v.end()
+	);
+}
+
 // template/static_cast/dynamic_cast/const_cast/reinterpret_cast 뒤 `<` 부터 짝 `>` 를
 // depth 추적으로 찾는다. `>>` 는 두 개의 close 이벤트로 분해해 각각 pair 를 방출.
 // `(...)` `[...]` 내부는 통째로 skip (내부 표현식에서 나체 `<`/`>` 는 안전).
@@ -2656,37 +2716,235 @@ static auto Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pai
 	}
 
 	// 중복 제거 (중첩 template 안의 static_cast 등이 두 번 잡히는 자리 처리).
-	std::sort(
-		out.begin(), out.end(),
-		[](Angle_pair const &a, Angle_pair const &b)->bool{
-			if(a.o_row != b.o_row){
-				return a.o_row < b.o_row;
+	::Dedup_angles(out);
+
+	return out;
+}
+
+// `>` 뒤 첫 의미 토큰이 "표현식을 시작할 수 없는 토큰"(닫힘 신호)인지 판정한다. 이런
+// 자리의 `>` 는 이항 비교/시프트일 수 없어 닫는 꺾쇠로 확정된다((col) 은 그 토큰의 시작).
+static auto Is_closer_signal(Lines const &mask, int const row, int const col)->bool{
+	std::string const &m = mask[row];
+	int const n = static_cast<int>(m.size());
+	char const c0 = m[col];
+	char const c1 = col + 1 < n ? m[col + 1] : '\0';
+
+	// 1문자 신호 — 구조 토큰과 단항형 없는 연산자(복합·중복형은 첫 문자로 포섭).
+	if( std::string("{;,)]}?/%|^=").find(c0) != std::string::npos ){
+		return true;
+	}
+
+	// 2문자 신호 — 둘째 문자로 단항형·`::`·리터럴·fold 를 갈라낸다.
+	if(c0 == ':'){
+		return c1 != ':';  // `::` 은 표현식 시작 가능 → 배제
+	}
+
+	if(c0 == '&'){
+		return c1 == '&';  // `&&` 만 (단독 `&` 는 주소 연산자)
+	}
+
+	if(c0 == '!'){
+		return c1 == '=';  // `!=` 만 (단독 `!` 는 논리 부정)
+	}
+
+	if(c0 == '+' || c0 == '*'){
+		return c1 == '=';  // `+=` `*=` 만 (단독 `+` `*` 는 단항형)
+	}
+
+	if(c0 == '-'){
+		return c1 == '=' || c1 == '>';  // `-=` `->` (`->*` 자동 포섭)
+	}
+
+	if(c0 == '.'){
+		// `.`+숫자는 부동리터럴(`a > .5`), `..`(→`...`)은 fold — 둘 다 표현식 시작.
+		unsigned char const u1 = static_cast<unsigned char>(c1);
+
+		return c1 != '.' && !std::isdigit(u1);
+	}
+
+	// 키워드 신호 — 정확 단어 경계(`const_cast`·`static_cast` 등 접두 오인 방지).
+	if( ::Word_starts_at(m, col) ){
+		std::string const w = ::Word_at(m, col);
+
+		return
+			w == "const" || w == "constexpr"
+			|| w == "volatile" || w == "static"
+		;
+	}
+
+	return false;
+}
+
+// 닫힘 신호로 앵커되는 꺾쇠. `>` 뒤 첫 의미 토큰이 닫힘 신호(Is_closer_signal)면 그 `>`
+// 를 닫는 꺾쇠로 확정하고 역방향으로 짝 `<` 를 찾아 쌍(중첩 포함)을 방출한다. `template`/
+// `*_cast` 앵커의 보완재로, 인스턴스화·상속·후행반환·brace-init·특수화·변수 템플릿을 커버.
+static auto Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
+	std::vector<Angle_pair> out;
+	int const rows = static_cast<int>(mask.size());
+
+	for(int r = 0; r < rows; ++r){
+		std::string const &m = mask[r];
+		int const n = static_cast<int>(m.size());
+
+		for(int c = 0; c < n; ++c){
+			if(m[c] != '>'){
+				continue;
 			}
 
-			if(a.o_col != b.o_col){
-				return a.o_col < b.o_col;
+			// 후보 `>` 자체 제외 — `>=`·`>>` 런 중간, `->`·`<=>` 조각.
+			if( c + 1 < n && (m[c + 1] == '=' || m[c + 1] == '>') ){
+				continue;
 			}
 
-			if(a.c_row != b.c_row){
-				return a.c_row < b.c_row;
+			if( c > 0 && (m[c - 1] == '-' || m[c - 1] == '=') ){
+				continue;
 			}
 
-			return a.c_col < b.c_col;
+			// operator>·operator>> 이름의 `>` 제외 — `>` 런을 건너 직전 단어 확인.
+			int w = c;
+
+			while(w > 0 && m[w - 1] == '>'){
+				--w;
+			}
+
+			if( ::Word_before(mask, r, w) == "operator" ){
+				continue;
+			}
+
+			// `>` 다음 첫 의미 토큰이 닫힘 신호인지.
+			int sr = r;
+			int sc = c + 1;
+
+			if( !::Next_code(mask, rows - 1, sr, sc) ){
+				continue;
+			}
+
+			if( !::Is_closer_signal(mask, sr, sc) ){
+				continue;
+			}
+
+			// 역방향 열거 — 후보 `>` 를 pending-close 스택에 넣고 왼쪽으로 짝 `<` 를 찾는다.
+			struct Close_pos{ int r, c; };
+
+			std::vector<Close_pos> close_stack;
+			std::vector<Angle_pair> local;
+			close_stack.push_back({ r, c });
+
+			int br = r;
+			int bc = c - 1;
+			bool aborted = false;
+
+			while(!close_stack.empty() && !aborted){
+				if(br < 0){
+					aborted = true;
+
+					break;
+				}
+
+				if(bc < 0){
+					--br;
+
+					if(br < 0){
+						aborted = true;
+
+						break;
+					}
+
+					bc = static_cast<int>(mask[br].size()) - 1;
+
+					continue;
+				}
+
+				char const ch = mask[br][bc];
+
+				if(ch == ' ' || ch == '\t' || ch == '@'){
+					--bc;
+
+					continue;
+				}
+
+				if(ch == ')' || ch == ']'){
+					char const op = ch == ')' ? '(' : '[';
+
+					if( !::Match_bracket_back(mask, op, ch, br, bc) ){
+						aborted = true;
+
+						break;
+					}
+
+					--bc;
+
+					continue;
+				}
+
+				// 짝 없는 여는 괄호·문장 경계 → 짝 `<` 를 못 찾음 → abort.
+				if(ch == '(' || ch == '[' || ch == '{' || ch == '}' || ch == ';'){
+					aborted = true;
+
+					break;
+				}
+
+				if(ch == '>'){
+					// `<=>`·`->` 조각이면 그 토큰 전체를 건너뛴다.
+					if(bc >= 2 && mask[br][bc - 1] == '=' && mask[br][bc - 2] == '<'){
+						bc -= 3;
+
+						continue;
+					}
+
+					if(bc > 0 && mask[br][bc - 1] == '-'){
+						bc -= 2;
+
+						continue;
+					}
+
+					close_stack.push_back({ br, bc });
+					--bc;
+
+					continue;
+				}
+
+				if(ch == '<'){
+					// operator< 이름의 `<` 는 괄호 아님.
+					if( ::Word_before(mask, br, bc) == "operator" ){
+						--bc;
+
+						continue;
+					}
+
+					// `<<` 는 잘 형성된 인자 목록에 나체로 못 옴 → abort.
+					if(bc > 0 && mask[br][bc - 1] == '<'){
+						aborted = true;
+
+						break;
+					}
+
+					if(close_stack.empty()){
+						aborted = true;
+
+						break;
+					}
+
+					Close_pos const cl = close_stack.back();
+					close_stack.pop_back();
+					local.push_back({ br, bc, cl.r, cl.c });
+					--bc;
+
+					continue;
+				}
+
+				--bc;
+			}
+
+			if(!aborted && close_stack.empty()){
+				for(Angle_pair const &a : local){
+					out.push_back(a);
+				}
+			}
 		}
-	);
+	}
 
-	out.erase(
-		std::unique(
-			out.begin(), out.end(),
-			[](Angle_pair const &a, Angle_pair const &b)->bool{
-				return
-					a.o_row == b.o_row && a.o_col == b.o_col
-					&& a.c_row == b.c_row && a.c_col == b.c_col
-				;
-			}
-		),
-		out.end()
-	);
+	::Dedup_angles(out);
 
 	return out;
 }
@@ -3044,7 +3302,10 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	::Check_anchor_case(lines, mask, out);
 	::Check_anchor_colon_vbracket(lines, mask, out);
 
-	std::vector<Angle_pair> const angles = ::Match_template_cast_angles(mask);
+	std::vector<Angle_pair> angles = ::Match_template_cast_angles(mask);
+	std::vector<Angle_pair> const closer_angles = ::Match_closer_anchored_angles(mask);
+	angles.insert(angles.end(), closer_angles.begin(), closer_angles.end());
+	::Dedup_angles(angles);
 
 	for(Angle_pair const &a : angles){
 		::Check_multiline_angle(lines, mask, a, out);
