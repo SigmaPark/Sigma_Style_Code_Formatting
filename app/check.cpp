@@ -1427,13 +1427,31 @@ static void Check_hidden_brace(
 		std::string const head = ::Word_at(m, first);
 
 		bool const
-			is_hidden
+			is_case_or_default
 			= head == "case" || head == "default"
-			|| head == "public" || head == "private" || head == "protected"
 		;
 
-		if(!is_hidden){
+		bool const
+			is_access_keyword
+			= head == "public" || head == "private" || head == "protected"
+		;
+
+		if(!is_case_or_default && !is_access_keyword){
 			continue;
+		}
+
+		// 접근지시자는 `public`/`private`/`protected` 바로 뒤 (공백 skip) 가 `:` 여야 한다.
+		// 아니면 상속 리스트의 `public Base` 등 다른 문맥이라 §5.6 대상 아님.
+		if(is_access_keyword){
+			int p = first + static_cast<int>(head.size());
+
+			while( p < m_n && (m[p] == ' ' || m[p] == '\t' || m[p] == '@') ){
+				++p;
+			}
+
+			if(p >= m_n || m[p] != ':'){
+				continue;
+			}
 		}
 
 		Bk_pair const *inner = nullptr;
