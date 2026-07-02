@@ -1897,6 +1897,474 @@ static void Check_anchor_case(
 	}
 }
 
+// §5.5 콜론 가상괄호 — 상속·enum 기반 타입·생성자 init list 세 자리 공통 레이아웃 검사.
+// 앵커 ':' 위치를 받아, 짝지어질 body '{' 를 전방 스캔으로 찾고, 다중행이면 세 조건 검사:
+//   (a) ':' 이 여는 행 마지막 코드 토큰인지
+//   (b) '{' 이 닫는 행 첫 코드 토큰인지
+//   (c) 사이 첫 코드 행 들여쓰기 ≥ ind(':') + 1
+// ctor init 자리에선 'mem_{val}' 형태의 braced-init 를 body '{' 로 오인하지 않도록,
+// '{' 직전 코드 문자가 식별자면 braced-init 로 간주해 짝 '}' 까지 skip.
+enum class Colon_vb_kind{ inherit_or_enum, ctor_init };
+
+static void Check_colon_vbracket_layout(
+	Lines const &lines, Lines const &mask,
+	int const a_row, int const a_col, Colon_vb_kind const kind,
+	std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	int p_depth = 0, sq_depth = 0, ang_depth = 0, c_depth = 0;
+	int close_row = -1, close_col = -1;
+	bool stopped = false;
+
+	for(int rr = a_row; rr < rows && close_row < 0 && !stopped; ++rr){
+		std::string const &cm = mask[rr];
+		int const cn = static_cast<int>(cm.size());
+		int const start = rr == a_row ? a_col + 1 : 0;
+
+		for(int cc = start; cc < cn; ++cc){
+			char const ch = cm[cc];
+
+			if(ch == '('){
+				++p_depth;
+			} else if(ch == ')'){
+				--p_depth;
+			} else if(ch == '['){
+				++sq_depth;
+			} else if(ch == ']'){
+				--sq_depth;
+			} else if(ch == '<'){
+				++ang_depth;
+			} else if(ch == '>' && ang_depth > 0){
+				--ang_depth;
+			} else if(ch == '{'){
+				bool const
+					inside_expr
+					= p_depth > 0 || sq_depth > 0 || ang_depth > 0
+				;
+
+				if(inside_expr){
+					// 표현식 내부 braced-init·요소. 우리 대상 아님.
+					continue;
+				}
+
+				if(c_depth > 0){
+					++c_depth;
+
+					continue;
+				}
+
+				bool is_body = true;
+
+				if(kind == Colon_vb_kind::ctor_init){
+					int rprev = rr, cprev = cc - 1;
+
+					while(rprev >= 0){
+						if(cprev < 0){
+							--rprev;
+
+							if(rprev < 0){
+								break;
+							}
+
+							cprev = static_cast<int>(mask[rprev].size()) - 1;
+
+							continue;
+						}
+
+						char const pc = mask[rprev][cprev];
+
+						if(pc == ' ' || pc == '\t' || pc == '@'){
+							--cprev;
+
+							continue;
+						}
+
+						if( ::is_word_char(pc) ){
+							is_body = false;
+						}
+
+						break;
+					}
+				}
+
+				if(is_body){
+					close_row = rr;
+					close_col = cc;
+
+					break;
+				}
+
+				++c_depth;
+			} else if(ch == '}'){
+				if(p_depth > 0 || sq_depth > 0 || ang_depth > 0){
+					continue;
+				}
+
+				if(c_depth > 0){
+					--c_depth;
+				}
+			} else if(
+				ch == ';'
+				&& p_depth == 0 && sq_depth == 0 && ang_depth == 0 && c_depth == 0
+			){
+				stopped = true;
+
+				break;
+			}
+		}
+	}
+
+	if(close_row < 0){
+		return;
+	}
+
+	if(close_row == a_row){
+		return;
+	}
+
+	// (a) ':' 이 여는 행 마지막 코드 토큰.
+	bool colon_last = true;
+	std::string const &am = mask[a_row];
+	int const an = static_cast<int>(am.size());
+
+	for(int cc = a_col + 1; cc < an; ++cc){
+		if( ::Is_code_char(am[cc]) ){
+			colon_last = false;
+
+			out.push_back({ a_row, cc, "5.5", "colon vbracket: ':' not last" });
+
+			break;
+		}
+	}
+
+	// (b) '{' 이 닫는 행 첫 코드 토큰.
+	std::string const &cm = mask[close_row];
+
+	for(int cc = 0; cc < close_col; ++cc){
+		if( ::Is_code_char(cm[cc]) ){
+			out.push_back(
+				{ close_row, cc, "5.5", "colon vbracket: '{' not first" }
+			);
+
+			break;
+		}
+	}
+
+	if(!colon_last){
+		return;
+	}
+
+	// (c) ':' 다음 첫 코드 행 들여쓰기 ≥ ind(':') + 1.
+	int const cur = ::Indent_depth(lines[a_row]);
+	int nr = a_row + 1;
+
+	while(nr < rows && nr < close_row){
+		if( !lines[nr].empty() && ::Has_code(mask[nr]) ){
+			break;
+		}
+
+		++nr;
+	}
+
+	if(nr >= close_row || nr >= rows){
+		return;
+	}
+
+	if( ::Indent_depth(lines[nr]) < cur + 1 ){
+		out.push_back({ nr, 0, "5.5", "colon vbracket: content underindented" });
+	}
+}
+
+// §5.5 콜론 가상괄호 스캐너 (A) — 상속·enum 기반 타입.
+// class/struct/union/enum 키워드 앵커에서 전방 스캔, (), <>, [] 깊이 추적으로
+// depth-0 ':' 이 나오면 앵커 확정. 앞서 '{' 나 ';' 을 만나면 무시 (본체 시작 or 전방 선언).
+static void Scan_type_decl_colon(
+	Lines const &lines, Lines const &mask, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	for(int r = 0; r < rows; ++r){
+		std::string const &m = mask[r];
+		int const n = static_cast<int>(m.size());
+		int c = 0;
+
+		while(c < n){
+			if( !::Word_starts_at(m, c) ){
+				++c;
+
+				continue;
+			}
+
+			std::string const w = ::Word_at(m, c);
+			int const e = c + static_cast<int>(w.size());
+
+			if(w != "class" && w != "struct" && w != "union" && w != "enum"){
+				c = e;
+
+				continue;
+			}
+
+			// 'enum class Name' / 'enum struct Name' — 뒤의 class/struct 는 skip (enum 이 앵커).
+			if(w == "class" || w == "struct"){
+				int pc = c - 1;
+
+				while( pc >= 0 && (m[pc] == ' ' || m[pc] == '\t' || m[pc] == '@') ){
+					--pc;
+				}
+
+				if( pc >= 0 && ::is_word_char(m[pc]) ){
+					int ps = pc;
+
+					while( ps > 0 && ::is_word_char(m[ps - 1]) ){
+						--ps;
+					}
+
+					std::string const prev(m, ps, pc - ps + 1);
+
+					if(prev == "enum"){
+						c = e;
+
+						continue;
+					}
+				}
+			}
+
+			int p_depth = 0, sq_depth = 0, ang_depth = 0;
+			int colon_row = -1, colon_col = -1;
+			bool stopped = false;
+
+			for(int rr = r; rr < rows && colon_row < 0 && !stopped; ++rr){
+				std::string const &cm = mask[rr];
+				int const cn = static_cast<int>(cm.size());
+				int const start = rr == r ? e : 0;
+
+				for(int cc = start; cc < cn; ++cc){
+					char const ch = cm[cc];
+
+					if(ch == '('){
+						++p_depth;
+					} else if(ch == ')'){
+						--p_depth;
+					} else if(ch == '['){
+						++sq_depth;
+					} else if(ch == ']'){
+						--sq_depth;
+					} else if(ch == '<'){
+						++ang_depth;
+					} else if(ch == '>' && ang_depth > 0){
+						--ang_depth;
+					} else if(p_depth == 0 && sq_depth == 0 && ang_depth == 0){
+						if(ch == ';' || ch == '{'){
+							stopped = true;
+
+							break;
+						} else if(ch == ':'){
+							bool const
+								is_scope
+								= (cc + 1 < cn && cm[cc + 1] == ':')
+								|| (cc > 0 && cm[cc - 1] == ':')
+							;
+
+							if(!is_scope){
+								colon_row = rr;
+								colon_col = cc;
+
+								break;
+							}
+						}
+					}
+				}
+			}
+
+			if(colon_row >= 0){
+				::Check_colon_vbracket_layout(
+					lines, mask, colon_row, colon_col,
+					Colon_vb_kind::inherit_or_enum, out
+				);
+			}
+
+			c = e;
+		}
+	}
+}
+
+// §5.5 콜론 가상괄호 스캐너 (B) — 생성자 멤버초기화 리스트.
+// ':' 좌측 근접 코드 문자가 ')' 이고, 문장 시작부터 여기까지 '?' 스택이 balanced 면 ctor init.
+// 문장 시작 = 역방향으로 depth-0 의 ';' / '{' / '}' 를 만난 지점 (또는 파일 시작).
+static void Scan_ctor_init_colon(
+	Lines const &lines, Lines const &mask, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	for(int r = 0; r < rows; ++r){
+		std::string const &m = mask[r];
+		int const n = static_cast<int>(m.size());
+
+		for(int c = 0; c < n; ++c){
+			if(m[c] != ':'){
+				continue;
+			}
+
+			bool const
+				is_scope
+				= (c + 1 < n && m[c + 1] == ':') || (c > 0 && m[c - 1] == ':')
+			;
+
+			if(is_scope){
+				continue;
+			}
+
+			// 좌측 근접 코드 문자 확인 — ')' 여야 함.
+			bool preceded_by_close_paren = false;
+
+			{
+				int lr = r, lc = c - 1;
+
+				while(lr >= 0){
+					if(lc < 0){
+						--lr;
+
+						if(lr < 0){
+							break;
+						}
+
+						lc = static_cast<int>(mask[lr].size()) - 1;
+
+						continue;
+					}
+
+					char const pc = mask[lr][lc];
+
+					if(pc == ' ' || pc == '\t' || pc == '@'){
+						--lc;
+
+						continue;
+					}
+
+					if(pc == ')'){
+						preceded_by_close_paren = true;
+					}
+
+					break;
+				}
+			}
+
+			if(!preceded_by_close_paren){
+				continue;
+			}
+
+			// 문장 시작 찾기 (역방향, depth-0 ';' / '{' / '}' 또는 파일 시작).
+			int start_row = 0, start_col = 0;
+
+			{
+				int lr = r, lc = c - 1;
+				int p_d = 0, s_d = 0;
+				bool found = false;
+
+				while(lr >= 0){
+					if(lc < 0){
+						--lr;
+
+						if(lr < 0){
+							break;
+						}
+
+						lc = static_cast<int>(mask[lr].size()) - 1;
+
+						continue;
+					}
+
+					char const pc = mask[lr][lc];
+
+					if(pc == ')'){
+						++p_d;
+					} else if(pc == '('){
+						--p_d;
+					} else if(pc == ']'){
+						++s_d;
+					} else if(pc == '['){
+						--s_d;
+					} else if(p_d == 0 && s_d == 0){
+						if(pc == ';' || pc == '{' || pc == '}'){
+							start_row = lr;
+							start_col = lc + 1;
+							found = true;
+
+							break;
+						}
+					}
+
+					--lc;
+				}
+
+				if(!found){
+					start_row = 0;
+					start_col = 0;
+				}
+			}
+
+			// 문장 시작부터 ':' 까지 전방 스캔해 '?' 카운트.
+			int q_count = 0;
+
+			{
+				int p_d = 0, s_d = 0;
+
+				for(int rr = start_row; rr <= r; ++rr){
+					std::string const &sm = mask[rr];
+					int const sn = static_cast<int>(sm.size());
+					int const s = rr == start_row ? start_col : 0;
+					int const eend = rr == r ? c : sn;
+
+					for(int cc = s; cc < eend; ++cc){
+						char const sc = sm[cc];
+
+						if(sc == '('){
+							++p_d;
+						} else if(sc == ')'){
+							--p_d;
+						} else if(sc == '['){
+							++s_d;
+						} else if(sc == ']'){
+							--s_d;
+						} else if(p_d == 0 && s_d == 0){
+							if(sc == '?'){
+								++q_count;
+							} else if(sc == ':'){
+								bool const
+									sub_scope
+									= (cc + 1 < sn && sm[cc + 1] == ':')
+									|| (cc > 0 && sm[cc - 1] == ':')
+								;
+
+								if(!sub_scope && q_count > 0){
+									--q_count;
+								}
+							}
+						}
+					}
+				}
+			}
+
+			if(q_count > 0){
+				continue;
+			}
+
+			::Check_colon_vbracket_layout(
+				lines, mask, r, c, Colon_vb_kind::ctor_init, out
+			);
+		}
+	}
+}
+
+// §5.5 콜론 가상괄호 — 두 스캐너 병치 진입점.
+static void Check_anchor_colon_vbracket(
+	Lines const &lines, Lines const &mask, std::vector<Violation> &out
+){
+	::Scan_type_decl_colon(lines, mask, out);
+	::Scan_ctor_init_colon(lines, mask, out);
+}
+
 // §3 금지 키워드 typedef/goto (@마스크, 단어 경계).
 static void Check_banned(std::string const &mask, int const row, std::vector<Violation> &out){
 	static std::string const Banned[] = { "typedef", "goto" };
@@ -2032,6 +2500,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	::Check_anchor_trailing_return(lines, mask, out);
 	::Check_anchor_inline_type(lines, mask, pairs, out);
 	::Check_anchor_case(lines, mask, out);
+	::Check_anchor_colon_vbracket(lines, mask, out);
 
 	for(int row = 0; row < rows; ++row){
 		::Check_width(lines[row], row, out);
