@@ -100,6 +100,18 @@ static auto is_word_char(char const c)->bool{
 
 	return std::isalnum(u) || c == '_';
 }
+
+// 위반을 내면서 edit 모드용 수정 힌트(§8.2/§11.2 토대)를 함께 싣는다.
+// (집합체 초기화를 한 행에 유지하고자 힌트는 여기서 붙인다.)
+static void Push_fix(
+	std::vector<Violation> &out, Violation v,
+	Fix_kind const kind, int const fix_col, int const fix_val
+){
+	v.fix = kind;
+	v.fix_col = fix_col;
+	v.fix_val = fix_val;
+	out.push_back(v);
+}
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 // §1.1 행 표시 폭 100 초과 (raw 행).
@@ -127,19 +139,9 @@ static void Check_indent(std::string const &line, int const row, std::vector<Vio
 	}
 }
 
-// §8.2 후행 공백 (@마스크).
-static void Check_trailing(std::string const &mask, int const row, std::vector<Violation> &out){
-	int const n = static_cast<int>(mask.size());
-	int p = n;
-
-	while( p > 0 && (mask[p - 1] == ' ' || mask[p - 1] == '\t') ){
-		--p;
-	}
-
-	if(p < n){
-		out.push_back({ row, p, "8.2", "trailing whitespace" });
-	}
-}
+// §8.2 무효/잉여 공백 — 개행 앞 유효 공백은 잉여라 보존한다(§8.2, §11.2 2칸 마커의 토대).
+// 행 시작 공백은 §1.2 Check_indent, 4연속+는 §8.1 Check_space_run, 꼬리 탭은 §8.1 Check_tab_use
+// 가 각각 담당하므로 §8.2 는 별도 후행-공백 검사를 두지 않는다.
 
 // §8.1 들여쓰기 이외 용도의 탭 (@마스크). 선두 들여쓰기 탭 이후의 탭은 위반.
 static void Check_tab_use(std::string const &mask, int const row, std::vector<Violation> &out){
@@ -315,11 +317,11 @@ static void Check_inner_space(std::string const &mask, int const row, std::vecto
 		}
 
 		if(after != want){
-			out.push_back({ row, pr.from, "8.5", msg });
+			::Push_fix(out, { row, pr.from, "8.5", msg }, Fix_kind::gap_right, pr.from + 1, want);
 		}
 
 		if(before != want){
-			out.push_back({ row, pr.to, "8.5", msg });
+			::Push_fix(out, { row, pr.to, "8.5", msg }, Fix_kind::gap_left, pr.to, want);
 		}
 	}
 }
@@ -561,7 +563,10 @@ static void Check_word_paren_space(
 			;
 
 			if( q > e && q < n && (mask[q] == '(' || mask[q] == '[' || mask[q] == '{') ){
-				out.push_back({ row, e, "8.4", "space between word and opening bracket" });
+				::Push_fix(
+					out, { row, e, "8.4", "space between word and opening bracket" },
+					Fix_kind::gap_right, e, 0
+				);
 			}
 
 			p = e;
@@ -570,7 +575,10 @@ static void Check_word_paren_space(
 		}
 
 		if( (c == ')' || c == ']' || c == '}') && p + 1 < n && ::is_word_char(mask[p + 1]) ){
-			out.push_back({ row, p + 1, "8.4", "missing space between closing bracket and word" });
+			::Push_fix(
+				out, { row, p + 1, "8.4", "missing space between closing bracket and word" },
+				Fix_kind::gap_left, p + 1, 1
+			);
 		}
 
 		++p;
@@ -1277,15 +1285,24 @@ static void Check_token_space(
 				;
 
 				if( eff_l && !semi_chain && gap_before(i) > 0 ){
-					out.push_back({ row, t.col, "8.3", "no space before separator" });
+					::Push_fix(
+						out, { row, t.col, "8.3", "no space before separator" },
+						Fix_kind::gap_left, t.col, 0
+					);
 				}
 
 				if( eff_l && semi_chain && gap_before(i) == 0 ){
-					out.push_back({ row, t.col, "8.3", "space required between consecutive ';'" });
+					::Push_fix(
+						out, { row, t.col, "8.3", "space required between consecutive ';'" },
+						Fix_kind::gap_left, t.col, 1
+					);
 				}
 
 				if( eff_r && right_cls != Tk_cls::sep && gap_after(i) == 0 ){
-					out.push_back({ row, t.col + t.len, "8.3", "space required after separator" });
+					::Push_fix(
+						out, { row, t.col + t.len, "8.3", "space required after separator" },
+						Fix_kind::gap_right, t.col + t.len, 1
+					);
 				}
 			}
 
@@ -1296,24 +1313,32 @@ static void Check_token_space(
 			}
 
 			if( eff_l && l_operand && gap_before(i) > 0 ){
-				out.push_back({ row, t.col, "8.3", "no space before '.','->','.*','->*'" });
+				::Push_fix(
+					out, { row, t.col, "8.3", "no space before '.','->','.*','->*'" },
+					Fix_kind::gap_left, t.col, 0
+				);
 			}
 
 			if( eff_r && r_operand && gap_after(i) > 0 ){
-				out.push_back(
-					{ row, t.col + t.len, "8.3", "no space after '.','->','.*','->*'" }
+				::Push_fix(
+					out, { row, t.col + t.len, "8.3", "no space after '.','->','.*','->*'" },
+					Fix_kind::gap_right, t.col + t.len, 0
 				);
 			}
 
 			break;
 		case Tk_cls::bin_s:
 			if( eff_l && l_operand && gap_before(i) == 0 ){
-				out.push_back({ row, t.col, "8.3", "space required before binary operator" });
+				::Push_fix(
+					out, { row, t.col, "8.3", "space required before binary operator" },
+					Fix_kind::gap_left, t.col, 1
+				);
 			}
 
 			if( eff_r && r_operand && gap_after(i) == 0 ){
-				out.push_back(
-					{ row, t.col + t.len, "8.3", "space required after binary operator" }
+				::Push_fix(
+					out, { row, t.col + t.len, "8.3", "space required after binary operator" },
+					Fix_kind::gap_right, t.col + t.len, 1
 				);
 			}
 
@@ -1350,7 +1375,10 @@ static void Check_multiline_bracket(
 	int const o_ind = ::Indent_depth(lines[p.o_row]), c_ind = ::Indent_depth(lines[p.c_row]);
 
 	if(o_ind != c_ind){
-		out.push_back({ p.c_row, 0, "5.4", "open/close indent differ" });
+		::Push_fix(
+			out, { p.c_row, 0, "5.4", "open/close indent differ" },
+			Fix_kind::indent, 0, o_ind
+		);
 	}
 
 	// (2) 여는 괄호가 행 마지막 코드 토큰인지
@@ -1417,7 +1445,10 @@ static void Check_multiline_bracket(
 		}
 
 		if(ind < o_ind + 1){
-			out.push_back({ r, 0, "5.4", "middle line indent insufficient" });
+			::Push_fix(
+				out, { r, 0, "5.4", "middle line indent insufficient" },
+				Fix_kind::indent, 0, o_ind + 1
+			);
 		}
 	}
 }
@@ -1497,7 +1528,10 @@ static void Check_hidden_brace(
 		int const r_ind = ::Indent_depth(lines[r]), o_ind = ::Indent_depth(lines[inner->o_row]);
 
 		if(r_ind != o_ind){
-			out.push_back({ r, 0, "5.6", "hidden close: indent must equal enclosing brace" });
+			::Push_fix(
+				out, { r, 0, "5.6", "hidden close: indent must equal enclosing brace" },
+				Fix_kind::indent, 0, o_ind
+			);
 		}
 	}
 }
@@ -1640,7 +1674,10 @@ static void Check_anchor_keyword_semicolon(
 			}
 
 			if( ::Indent_depth(lines[nr]) < cur + 1 ){
-				out.push_back({ nr, 0, "5.5", "virtual bracket: continuation underindented" });
+				::Push_fix(
+					out, { nr, 0, "5.5", "virtual bracket: continuation underindented" },
+					Fix_kind::indent, 0, cur + 1
+				);
 			}
 
 			c = e;
@@ -1670,7 +1707,10 @@ static void Push_anchor_indent_check(
 	int const cur = ::Indent_depth(lines[cur_row]);
 
 	if( ::Indent_depth(lines[nr]) < cur + 1 ){
-		out.push_back({ nr, 0, "5.5", "virtual bracket: continuation underindented" });
+		::Push_fix(
+			out, { nr, 0, "5.5", "virtual bracket: continuation underindented" },
+			Fix_kind::indent, 0, cur + 1
+		);
 	}
 }
 
@@ -1870,7 +1910,10 @@ static void Check_anchor_inline_type(
 		int const cur = ::Indent_depth(lines[p.c_row]);
 
 		if( ::Indent_depth(lines[nr]) < cur + 1 ){
-			out.push_back({ nr, 0, "5.5", "inline type: var-list underindented" });
+			::Push_fix(
+				out, { nr, 0, "5.5", "inline type: var-list underindented" },
+				Fix_kind::indent, 0, cur + 1
+			);
 		}
 	}
 }
@@ -2114,7 +2157,10 @@ static void Check_colon_vbracket_layout(
 	}
 
 	if( ::Indent_depth(lines[nr]) < cur + 1 ){
-		out.push_back({ nr, 0, "5.5", "colon vbracket: content underindented" });
+		::Push_fix(
+			out, { nr, 0, "5.5", "colon vbracket: content underindented" },
+			Fix_kind::indent, 0, cur + 1
+		);
 	}
 }
 
@@ -2405,6 +2451,116 @@ static void Check_anchor_colon_vbracket(
 ){
 	::Scan_type_decl_colon(lines, mask, out);
 	::Scan_ctor_init_colon(lines, mask, out);
+}
+
+// §5.5 변수 선언문 가상괄호 — §11.2 권장 2칸 마커로 반자동 감지.
+// 마지막 top-notorious(vexing parse)라 파서 없이는 잡기 어려운 자리를, 사용자가 놓은
+// "타입 끝·개행 직전 잉여공백 2칸"(§11.2)을 신뢰하고 닫는 `;` 로 재검증해 잡는다.
+// 판정: 어떤 행이 (마스크 기준) 정확히 공백 2칸으로 끝나고, 그 앞 마지막 코드 문자가 타입
+// 표현의 꼬리로 볼 수 있으면(‹`; { } ) ] , ( [`› 아님) 여는 가상괄호 후보. 후보부터 통합
+// 깊이 추적으로 depth-0 `;`(중첩 `()[]{}`·람다 본문 skip)을 찾으면 변수선언 가상괄호로 확정.
+// 확정 시 §5.5 레이아웃을 검사한다: (a) 타입이 마커 행 마지막 — 마커가 보장하므로 생략,
+// (b) `;` 이 닫는 행 첫 코드 토큰, (c) 이음줄 들여쓰기 ≥ 마커 행 +1. 미확정이면 조용히 넘긴다
+// (무해한 거짓음성 → 서브에이전트 폴백). 위양성 0 계약은 사용자 표식을 신뢰하는 형태로 지킨다.
+static void Check_anchor_var_decl_marker(
+	Lines const &lines, Lines const &mask, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(lines.size());
+
+	for(int r = 0; r < rows; ++r){
+		std::string const &m = mask[r];
+		int const n = static_cast<int>(m.size());
+
+		// 꼬리 공백 개수 (탭은 §8.1 소관이라 세지 않는다).
+		int t = n;
+
+		while(t > 0 && m[t - 1] == ' '){
+			--t;
+		}
+
+		if(n - t != 2){
+			continue;
+		}
+
+		// 2칸 바로 앞은 코드 문자여야 하고, 타입 표현의 꼬리로 볼 수 있어야 한다.
+		int const p = t - 1;
+
+		if( p < 0 || !::Is_code_char(m[p]) ){
+			continue;
+		}
+
+		if(
+			char const last = m[p];
+			last == ';' || last == '{' || last == '}' || last == ')' || last == ']'
+			|| last == ',' || last == '(' || last == '['
+		){
+			continue;
+		}
+
+		// 후보 지점부터 통합 깊이 추적으로 짝 `;` 를 찾는다(중첩 `()[]{}`·람다 본문 skip).
+		int depth = 0;
+		int close_row = -1, close_col = -1;
+
+		for(int rr = r; rr < rows && close_row < 0; ++rr){
+			std::string const &cm = mask[rr];
+			int const cn = static_cast<int>(cm.size());
+			int const start = rr == r ? t : 0;
+
+			for(int cc = start; cc < cn; ++cc){
+				char const ch = cm[cc];
+
+				if(ch == '(' || ch == '[' || ch == '{'){
+					++depth;
+				} else if(ch == ')' || ch == ']' || ch == '}'){
+					--depth;
+				} else if(ch == ';' && depth == 0){
+					close_row = rr;
+					close_col = cc;
+
+					break;
+				}
+			}
+		}
+
+		// 짝 `;` 를 못 찾았거나 같은 행이면 변수선언 가상괄호로 확정하지 않는다.
+		if(close_row <= r){
+			continue;
+		}
+
+		// (b) `;` 이 닫는 행 첫 코드 토큰인지.
+		std::string const &cm = mask[close_row];
+
+		for(int cc = 0; cc < close_col; ++cc){
+			if( ::Is_code_char(cm[cc]) ){
+				out.push_back({ close_row, cc, "5.5", "var-decl marker: ';' not first" });
+
+				break;
+			}
+		}
+
+		// (c) 다음 코드 행 들여쓰기 ≥ 마커 행 +1.
+		int const cur = ::Indent_depth(lines[r]);
+		int nr = r + 1;
+
+		while(nr < rows){
+			if( !lines[nr].empty() && ::Has_code(mask[nr]) ){
+				break;
+			}
+
+			++nr;
+		}
+
+		if(nr >= rows){
+			continue;
+		}
+
+		if( ::Indent_depth(lines[nr]) < cur + 1 ){
+			::Push_fix(
+				out, { nr, 0, "5.5", "var-decl marker: continuation underindented" },
+				Fix_kind::indent, 0, cur + 1
+			);
+		}
+	}
 }
 
 // §5·§8 꺾쇠괄호 매처·검사 — template<...> · *_cast<...> 자리 (문법 확정).
@@ -2962,7 +3118,10 @@ static void Check_multiline_angle(
 	int const c_ind = ::Indent_depth(lines[p.c_row]);
 
 	if(o_ind != c_ind){
-		out.push_back({ p.c_row, 0, "5.4", "angle: open/close indent differ" });
+		::Push_fix(
+			out, { p.c_row, 0, "5.4", "angle: open/close indent differ" },
+			Fix_kind::indent, 0, o_ind
+		);
 	}
 
 	std::string const &o_line = mask[p.o_row];
@@ -3000,7 +3159,10 @@ static void Check_multiline_angle(
 		}
 
 		if( ::Indent_depth(lines[r]) < o_ind + 1 ){
-			out.push_back({ r, 0, "5.4", "angle: middle line indent insufficient" });
+			::Push_fix(
+				out, { r, 0, "5.4", "angle: middle line indent insufficient" },
+				Fix_kind::indent, 0, o_ind + 1
+			);
 		}
 	}
 }
@@ -3048,8 +3210,9 @@ static void Check_angle_boundary(
 			}
 
 			if( q >= 0 && ::is_word_char(o_line[q]) ){
-				out.push_back(
-					{ p.o_row, p.o_col, "8.4", "angle: space between word and '<'" }
+				::Push_fix(
+					out, { p.o_row, p.o_col, "8.4", "angle: space between word and '<'" },
+					Fix_kind::gap_left, p.o_col, 0
 				);
 			}
 		}
@@ -3072,14 +3235,16 @@ static void Check_angle_boundary(
 
 	if(nx == '(' || nx == '['){
 		if(has_space){
-			out.push_back(
-				{ p.c_row, p.c_col + 1, "8.4", "angle: space between '>' and '(' or '['" }
+			::Push_fix(
+				out, { p.c_row, p.c_col + 1, "8.4", "angle: space between '>' and '(' or '['" },
+				Fix_kind::gap_right, p.c_col + 1, 0
 			);
 		}
 	} else if( ::is_word_char(nx) ){
 		if(!has_space){
-			out.push_back(
-				{ p.c_row, p.c_col + 1, "8.4", "angle: '>' and word need one space" }
+			::Push_fix(
+				out, { p.c_row, p.c_col + 1, "8.4", "angle: '>' and word need one space" },
+				Fix_kind::gap_right, p.c_col + 1, 1
 			);
 		}
 	}
@@ -3156,11 +3321,17 @@ static void Check_angle_inner_space(
 	}
 
 	if(left != n){
-		out.push_back({ p.o_row, p.o_col + 1, "8.5", "angle: inner space must be N" });
+		::Push_fix(
+			out, { p.o_row, p.o_col + 1, "8.5", "angle: inner space must be N" },
+			Fix_kind::gap_right, p.o_col + 1, n
+		);
 	}
 
 	if(right != n){
-		out.push_back({ p.o_row, p.c_col - right, "8.5", "angle: inner space must be N" });
+		::Push_fix(
+			out, { p.o_row, p.c_col - right, "8.5", "angle: inner space must be N" },
+			Fix_kind::gap_left, p.c_col, n
+		);
 	}
 }
 
@@ -3300,6 +3471,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	::Check_anchor_inline_type(lines, mask, pairs, out);
 	::Check_anchor_case(lines, mask, out);
 	::Check_anchor_colon_vbracket(lines, mask, out);
+	::Check_anchor_var_decl_marker(lines, mask, out);
 
 	std::vector<Angle_pair> angles = ::Match_template_cast_angles(mask);
 	std::vector<Angle_pair> const closer_angles = ::Match_closer_anchored_angles(mask);
@@ -3316,7 +3488,6 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	for(int row = 0; row < rows; ++row){
 		::Check_width(lines[row], row, out);
 		::Check_indent(lines[row], row, out);
-		::Check_trailing(mask[row], row, out);
 		::Check_tab_use(mask[row], row, out);
 		::Check_space_run(mask[row], row, out);
 		::Check_inner_space(mask[row], row, out);
@@ -3331,4 +3502,159 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	}
 
 	return out;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
+// 한 행에서 공백·탭을 모두 뺀 문자열 — 회귀 게이트용(비공백·줄 구조 불변 증명).
+static auto Strip_ws(std::string const &line)->std::string{
+	std::string out;
+
+	for(char const ch : line){
+		if(ch != ' ' && ch != '\t'){
+			out += ch;
+		}
+	}
+
+	return out;
+}
+
+// edit 한 항목: 어느 행·열의 위반을 어떤 수정으로 처리했는지.
+struct Edit_op{
+	int row, col, val;
+	Fix_kind kind;
+};
+
+// 한 행에 수정을 적용한다. gap 은 fix_col 경계의 공백·탭 런을 val 개의 공백으로,
+// indent 는 선두 공백·탭 구역을 val 개의 탭으로 맞춘다(모두 공백·탭만 건드린다).
+static void Apply_edit_op(std::string &line, Edit_op const &op){
+	int const n = static_cast<int>(line.size());
+
+	if(op.kind == Fix_kind::indent){
+		int q = 0;
+
+		while( q < n && (line[q] == ' ' || line[q] == '\t') ){
+			++q;
+		}
+
+		line = std::string(op.val, '\t') + line.substr(q);
+
+		return;
+	}
+
+	if(op.kind == Fix_kind::gap_left){
+		int s = op.col;
+
+		while( s > 0 && (line[s - 1] == ' ' || line[s - 1] == '\t') ){
+			--s;
+		}
+
+		line = line.substr(0, s) + std::string(op.val, ' ') + line.substr(op.col);
+
+		return;
+	}
+
+	if(op.kind == Fix_kind::gap_right){
+		int e = op.col;
+
+		while( e < n && (line[e] == ' ' || line[e] == '\t') ){
+			++e;
+		}
+
+		line = line.substr(0, op.col) + std::string(op.val, ' ') + line.substr(e);
+	}
+}
+
+auto edit_lines(Lines const &input, int const lo, int const hi)->Edit_result{
+	Lines lines = input;
+	std::vector<Edit_note> fixed_notes;
+
+	// 고정점까지 반복 — 매 패스 재검사해 자동교정 힌트(fix != none)를 모아 적용한다.
+	for(int pass = 0; pass < 8; ++pass){
+		Seg_lines const segs = ::scan_lines(lines);
+		std::vector<Violation> const viol = ::check_lines(lines, segs);
+
+		std::vector<Edit_op> ops;
+
+		for(Violation const &v : viol){
+			if(v.fix == Fix_kind::none || v.row < lo || v.row > hi){
+				continue;
+			}
+
+			ops.push_back({ v.row, v.fix_col, v.fix_val, v.fix });
+			fixed_notes.push_back({ v.row, v.col, v.rule, v.message, true });
+		}
+
+		if(ops.empty()){
+			break;
+		}
+
+		// 한 행 안에서는 오른쪽(높은 열)부터 적용해 앞선 수정이 뒤 열을 밀지 않게 한다.
+		// indent 는 fix_col 이 0 이라 자연히 마지막에 적용된다.
+		std::sort(
+			ops.begin(), ops.end(),
+			[](Edit_op const &a, Edit_op const &b)->bool{
+				return a.row != b.row ? a.row < b.row : a.col > b.col;
+			}
+		);
+
+		for(Edit_op const &op : ops){
+			::Apply_edit_op(lines[op.row], op);
+		}
+	}
+
+	// 회귀 게이트 — 공백·탭 제거 후 바이트 동일 + 행 수 불변이어야 자동교정이 정당하다.
+	bool ok = lines.size() == input.size();
+
+	for(std::size_t i = 0; ok && i < lines.size(); ++i){
+		if( ::Strip_ws(lines[i]) != ::Strip_ws(input[i]) ){
+			ok = false;
+		}
+	}
+
+	Edit_result res;
+	res.ok = ok;
+	res.lines = ok ? lines : input;
+
+	// 자동교정 기록(중복 제거) — 게이트를 통과했을 때만 유효하다.
+	if(ok){
+		for(Edit_note const &fn : fixed_notes){
+			bool dup = false;
+
+			for(Edit_note const &seen : res.notes){
+				if(
+					seen.row == fn.row && seen.col == fn.col
+					&& seen.rule == fn.rule && seen.message == fn.message
+				){
+					dup = true;
+
+					break;
+				}
+			}
+
+			if(!dup){
+				res.notes.push_back(fn);
+			}
+		}
+	}
+
+	// 자동교정 밖에 남은 위반(범위 안)을 manual 로 기록 — 사람·AI 인계 목록.
+	Seg_lines const segs = ::scan_lines(res.lines);
+	std::vector<Violation> const remain = ::check_lines(res.lines, segs);
+
+	for(Violation const &v : remain){
+		if(v.row < lo || v.row > hi){
+			continue;
+		}
+
+		res.notes.push_back({ v.row, v.col, v.rule, v.message, false });
+	}
+
+	std::sort(
+		res.notes.begin(), res.notes.end(),
+		[](Edit_note const &a, Edit_note const &b)->bool{
+			return a.row != b.row ? a.row < b.row : a.col < b.col;
+		}
+	);
+
+	return res;
 }

@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -176,6 +177,132 @@ static auto Check_file(std::string const &path, Line_range const range)->std::si
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
+// 원문 바이트를 행 내용과 종결자로 갈라 담는다 — edit 이 개행 종류·마지막 개행을 그대로 보존한다.
+struct Raw_file{
+	Lines contents;
+	std::vector<std::string> terms;
+};
+
+// 파일을 바이너리로 읽어 Raw_file 로 분해한다(내용은 Read_lines 와 동일하게 '\r' 를 뗀다).
+// 열기 실패면 false.
+static auto Read_raw(std::string const &path, Raw_file &out)->bool{
+	std::ifstream in(path, std::ios::binary);
+
+	if(!in){
+		return false;
+	}
+
+	std::ostringstream ss;
+	ss << in.rdbuf();
+	std::string const buf = ss.str();
+	std::size_t const n = buf.size();
+	std::size_t i = 0;
+
+	while(i < n){
+		std::size_t j = i;
+
+		while(j < n && buf[j] != '\n'){
+			++j;
+		}
+
+		std::size_t e = j < n ? j : n;
+		std::string term = j < n ? "\n" : "";
+
+		if(e > i && buf[e - 1] == '\r'){
+			--e;
+			term = j < n ? "\r\n" : "\r";
+		}
+
+		std::string const content = buf.substr(i, e - i);
+		out.contents.push_back(content);
+		out.terms.push_back(term);
+		i = j < n ? j + 1 : n;
+	}
+
+	return true;
+}
+
+// range(1-기준 [start,end]) 를 edit_lines 용 0-기준 포함범위 [lo,hi] 로 바꾼다.
+static auto Range_to_lo_hi(Line_range const range, int &lo, int &hi)->void{
+	int const int_max = std::numeric_limits<int>::max();
+
+	lo = range.start > 1 ? static_cast<int>(range.start) - 1 : 0;
+	hi
+	= range.end >= static_cast<std::size_t>(int_max)
+	? int_max
+	: static_cast<int>(range.end) - 1
+	;
+}
+
+// 한 파일을 edit 한다. 자동교정·범위밖(manual) 기록을 출력하고, dry 가 아니면 원자적으로 쓴다.
+// 남은 manual 위반 개수를 돌려준다(종료코드용).
+static auto Edit_file(std::string const &path, Line_range const range, bool const dry)->std::size_t{
+	Raw_file raw;
+
+	if( !::Read_raw(path, raw) ){
+		std::cerr << "error: cannot read: " << path << "\n";
+
+		return 0;
+	}
+
+	int lo = 0, hi = 0;
+	::Range_to_lo_hi(range, lo, hi);
+
+	Edit_result const res = ::edit_lines(raw.contents, lo, hi);
+
+	if(!res.ok){
+		std::cerr << path << ": edit aborted (regression gate failed); left unchanged\n";
+
+		return 0;
+	}
+
+	std::size_t manual = 0;
+
+	for(Edit_note const &note : res.notes){
+		std::cout
+		<< path << ":" << note.row + 1 << ":" << note.col + 1
+		<< " [" << note.rule << "] " << note.message
+		<< (note.fixed ? " (fixed)" : " [manual]") << "\n";
+
+		if(!note.fixed){
+			++manual;
+		}
+	}
+
+	if(!dry && res.lines != raw.contents){
+		std::string buf;
+
+		for(std::size_t i = 0; i < res.lines.size(); ++i){
+			buf += res.lines[i];
+			buf += raw.terms[i];
+		}
+
+		std::string const tmp = path + ".sak_tmp";
+
+		{
+			std::ofstream fout(tmp, std::ios::binary | std::ios::trunc);
+
+			if(!fout){
+				std::cerr << "error: cannot write: " << path << "\n";
+
+				return manual;
+			}
+
+			fout << buf;
+		}
+
+		std::error_code ec;
+		fs::rename(tmp, path, ec);
+
+		if(ec){
+			std::cerr << "error: cannot replace: " << path << "\n";
+		}
+	}
+
+	return manual;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
 auto main(int const argc, char const * const *argv)->int{
 	std::vector<std::string> const
 		args
@@ -191,12 +318,18 @@ auto main(int const argc, char const * const *argv)->int{
 			<< "usage:\n"
 			<< "  sak <file>\n"
 			<< "  sak <directory> [-r]\n"
-			<< "  sak <file> -b <start>:<end>    (e.g. 3:50, 3:, :50)\n";
+			<< "  sak <file> -b <start>:<end>    (e.g. 3:50, 3:, :50)\n"
+			<< "  sak edit <file|directory> [-r] [-b <start>:<end>] [-n|--dry-run]\n";
 		}
 	;
 
+	// 첫 토큰이 edit 이면 edit 모드, 나머지 인수는 기존 파서에 그대로 흘린다.
+	bool const edit_mode = !args.empty() && args[0] == "edit";
+	std::size_t const arg_start = edit_mode ? 1 : 0;
+
 	bool recur = false;
 	bool has_range = false;
+	bool dry = false;
 
 	Line_range range
 	= {
@@ -207,11 +340,13 @@ auto main(int const argc, char const * const *argv)->int{
 	std::string target;
 	bool parse_ok = true;
 
-	for(std::size_t i = 0; i < args.size(); ++i){
+	for(std::size_t i = arg_start; i < args.size(); ++i){
 		std::string const &a = args[i];
 
 		if(a == "-r"){
 			recur = true;
+		} else if(a == "-n" || a == "--dry-run"){
+			dry = true;
 		} else if(a == "-b"){
 			if(i + 1 >= args.size()){
 				std::cerr << "error: -b requires a range argument (e.g. 3:50, 3:, :50)\n";
@@ -248,6 +383,12 @@ auto main(int const argc, char const * const *argv)->int{
 
 		return 2;
 	}
+
+	if(dry && !edit_mode){
+		std::cerr << "error: -n/--dry-run is only valid with 'edit'\n";
+
+		return 2;
+	}
 	//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 	fs::path const path = target;
@@ -259,6 +400,10 @@ auto main(int const argc, char const * const *argv)->int{
 			return 2;
 		}
 
+		if(edit_mode){
+			return ::Edit_file(target, range, dry) == 0 ? 0 : 1;
+		}
+
 		return ::Check_file(target, range) == 0 ? 0 : 1;
 	}
 
@@ -267,6 +412,19 @@ auto main(int const argc, char const * const *argv)->int{
 			std::cerr << "error: -b requires a file, not a directory\n";
 
 			return 2;
+		}
+
+		if(edit_mode){
+			std::size_t manual = 0, files = 0;
+
+			for( std::string const &f : ::Collect_sources(path, recur) ){
+				manual += ::Edit_file(f, range, dry);
+				++files;
+			}
+
+			std::cout << "[sak edit] " << files << " file(s), " << manual << " manual item(s)\n";
+
+			return manual == 0 ? 0 : 1;
 		}
 
 		std::size_t total = 0, files = 0;
