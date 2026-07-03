@@ -605,7 +605,6 @@ static auto First_significant_col(std::string const &mask_row)->int{
 // 그 외 형태(단어 + 단어, 단어 + 여는괄호, '}' + 단어, 공행으로 분리된 두 토큰,
 //   가상괄호 발현 자리 등)는 §5.5 변수선언/using/return 등의 다중행 합법 발현과
 //   공행으로 단락이 갈린 정상 케이스를 가르려면 의미 해석이 필요해 sak 보수 영역 밖이다.
-//   (sak_coverage.md '구현 로드맵' 참조 — 가상괄호 발현은 단계 3 §5.5 위에서 다룬다.)
 static void Check_word_paren_newline(
 	Lines const &mask, int const row, std::vector<Violation> &out
 ){
