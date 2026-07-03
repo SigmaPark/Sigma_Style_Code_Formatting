@@ -30,7 +30,7 @@ static auto is_digit_sep(std::string const &line, int const i)->bool{
 		return false;
 	}
 
-	auto const
+	auto const  
 		prev = static_cast<unsigned char>(line[i - 1]),
 		next = static_cast<unsigned char>(line[i + 1])
 	;
@@ -135,7 +135,7 @@ static auto Scan_one_line(
 		kind = Seg_kind::raw_string;
 	}
 
-	auto
+	auto  
 		flush
 		= [&seg_start, &segs, &kind, &row](int const end){
 			if(end > seg_start){

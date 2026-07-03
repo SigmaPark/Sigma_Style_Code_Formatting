@@ -104,7 +104,7 @@ static auto Parse_line_range(std::string const &s, Line_range &out)->bool{
 	std::size_t start = 1;
 	std::size_t end = std::numeric_limits<std::size_t>::max();
 
-	auto const
+	auto const  
 		parse_one
 		= [](std::string const &tok, std::size_t &out_v)->bool{
 			if(tok.empty()){
@@ -303,14 +303,14 @@ static auto Edit_file(std::string const &path, Line_range const range, bool cons
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 auto main(int const argc, char const * const *argv)->int{
-	std::vector<std::string> const
+	std::vector<std::string> const  
 		args
 		= [begin = argv + 1, n = argc - 1]()->std::vector<std::string>{
 			return{ begin, begin + n };
 		}()
 	;
 
-	auto const
+	auto const  
 		print_usage
 		= []()->void{
 			std::cerr

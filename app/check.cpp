@@ -13,7 +13,7 @@
 
 // 코드포인트가 동아시아 와이드/전각 근사 범위에 드는지.
 static auto is_wide(unsigned long const cp)->bool{
-	struct Range{ unsigned long lo, hi; } constexpr
+	struct Range{ unsigned long lo, hi; } constexpr  
 		Wide_ranges[]
 		= {
 			{ 0x1100, 0x115F },
@@ -485,7 +485,7 @@ static void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Viola
 		std::string const word = ::Word_at(line, i);
 		int const e = i + static_cast<int>(word.size());
 
-		auto const
+		auto const  
 			[br, bc, body_found]
 			= [row, e, &mask, max_row, &word](bool const has_cond){
 				struct{ int _0, _1; bool _2; } res{ row, e, false };
@@ -513,7 +513,7 @@ static void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Viola
 		if(body_found){
 			char const body = mask[br][bc];
 
-			bool const
+			bool const  
 				legal
 				= word == "while" && body == ';' ? ::Is_do_tail(mask, row, i)
 				: word == "else" && body != '{' ? ::Word_at(mask[br], bc) == "if"
@@ -547,7 +547,7 @@ static void Check_word_paren_space(
 		char const c = mask[p];
 
 		if( ::is_word_char(c) ){
-			int const
+			int const  
 				e
 				= [n, &mask](int res){
 					for( ; res < n && ::is_word_char(mask[res]); ++res ){}
@@ -924,7 +924,7 @@ static void Check_bracket_blank_line(
 		if( !lines[nr].empty() && ::Has_code(above) && ::Indent_depth(lines[nr]) == o_ind ){
 			char const above_last = ::Last_code_char(above);
 
-			bool const
+			bool const  
 				at_stmt_boundary
 				= (above_last == ';' || above_last == '}')
 				&& !::Starts_with_continuation_op(mask[p.o_row])
@@ -943,7 +943,7 @@ static void Check_bracket_blank_line(
 		std::string const &below = mask[nr];
 
 		if( !lines[nr].empty() && ::Has_code(below) && ::Indent_depth(lines[nr]) == c_ind ){
-			bool const
+			bool const  
 				at_stmt_boundary
 				= !::Has_nonsemi_code_after(mask[p.c_row], p.c_col + p.c_len)
 				&& !::Starts_with_continuation_op(below)
@@ -1205,7 +1205,7 @@ static void Check_token_space(
 		return;
 	}
 
-	auto const
+	auto const  
 		gap_before
 		= [&mask, &toks](int const i)->int{
 			int g = 0;
@@ -1218,7 +1218,7 @@ static void Check_token_space(
 		}
 	;
 
-	auto const
+	auto const  
 		gap_after
 		= [&mask, &toks, mask_n](int const i)->int{
 			int const e = toks[i].col + toks[i].len;
@@ -1232,7 +1232,7 @@ static void Check_token_space(
 		}
 	;
 
-	auto const
+	auto const  
 		word_eq
 		= [&mask, &toks](int const i, char const *kw)->bool{
 			if(toks[i].cls != Tk_cls::word){
@@ -1253,7 +1253,7 @@ static void Check_token_space(
 		Tok_8_3 const &t = toks[i];
 		bool const has_l = i > 0, has_r = i + 1 < n;
 
-		Tk_cls const
+		Tk_cls const  
 			left_cls = has_l ? toks[i - 1].cls : Tk_cls::skip,
 			right_cls = has_r ? toks[i + 1].cls : Tk_cls::skip
 		;
@@ -1265,7 +1265,7 @@ static void Check_token_space(
 		}
 
 		// 투명성: 좌측 open_b·우측 close_b 는 인접 토큰으로 보지 않는다.
-		bool const
+		bool const  
 			eff_l = has_l && left_cls != Tk_cls::open_b,
 			eff_r = has_r && right_cls != Tk_cls::close_b,
 			l_operand = left_cls == Tk_cls::word || left_cls == Tk_cls::close_b,
@@ -1277,7 +1277,7 @@ static void Check_token_space(
 			{
 				// `for(init;;++itr2)` 처럼 `;` 두 개가 연속하면 그 사이는 공백 1 필수
 				// (spec §8.3 SEP 항 예외). `,` 끼리·`,`+`;` 혼합은 일반 SEP 룰을 그대로 따른다.
-				bool const
+				bool const  
 					semi_chain
 					= t.len == 1 && mask[t.col] == ';'
 					&& has_l && toks[i - 1].cls == Tk_cls::sep
@@ -1424,7 +1424,7 @@ static void Check_multiline_bracket(
 
 		std::string const head = first < m_n ? ::Word_at(m, first) : "";
 
-		bool const
+		bool const  
 			hidden_close
 			= head == "case" || head == "default"
 			|| head == "public" || head == "private" || head == "protected"
@@ -1481,12 +1481,12 @@ static void Check_hidden_brace(
 
 		std::string const head = ::Word_at(m, first);
 
-		bool const
+		bool const  
 			is_case_or_default
 			= head == "case" || head == "default"
 		;
 
-		bool const
+		bool const  
 			is_access_keyword
 			= head == "public" || head == "private" || head == "protected"
 		;
@@ -1958,7 +1958,7 @@ static void Check_anchor_case(
 				} else if(ch == ')' || ch == ']' || ch == '}'){
 					--depth;
 				} else if(ch == ':' && depth == 0){
-					bool const
+					bool const  
 						is_scope
 						= (cc + 1 < n && m[cc + 1] == ':') || (cc > 0 && m[cc - 1] == ':')
 					;
@@ -2023,7 +2023,7 @@ static void Check_colon_vbracket_layout(
 			} else if(ch == '>' && ang_depth > 0){
 				--ang_depth;
 			} else if(ch == '{'){
-				bool const
+				bool const  
 					inside_expr
 					= p_depth > 0 || sq_depth > 0 || ang_depth > 0
 				;
@@ -2248,7 +2248,7 @@ static void Scan_type_decl_colon(
 
 							break;
 						} else if(ch == ':'){
-							bool const
+							bool const  
 								is_scope
 								= (cc + 1 < cn && cm[cc + 1] == ':')
 								|| (cc > 0 && cm[cc - 1] == ':')
@@ -2294,7 +2294,7 @@ static void Scan_ctor_init_colon(
 				continue;
 			}
 
-			bool const
+			bool const  
 				is_scope
 				= (c + 1 < n && m[c + 1] == ':') || (c > 0 && m[c - 1] == ':')
 			;
@@ -2419,7 +2419,7 @@ static void Scan_ctor_init_colon(
 							if(sc == '?'){
 								++q_count;
 							} else if(sc == ':'){
-								bool const
+								bool const  
 									sub_scope
 									= (cc + 1 < sn && sm[cc + 1] == ':')
 									|| (cc > 0 && sm[cc - 1] == ':')
@@ -2629,7 +2629,7 @@ static auto Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pai
 			std::string const w = ::Word_at(m, c);
 			int const e = c + static_cast<int>(w.size());
 
-			bool const
+			bool const  
 				is_anchor
 				= w == "template" || w == "static_cast"
 				|| w == "dynamic_cast" || w == "const_cast" || w == "reinterpret_cast"
@@ -3276,7 +3276,7 @@ static void Check_angle_inner_space(
 				continue;
 			}
 
-			bool const
+			bool const  
 				inside
 				= ( b.o_row > a.o_row || (b.o_row == a.o_row && b.o_col > a.o_col) )
 				&& ( b.c_row < a.c_row || (b.c_row == a.c_row && b.c_col < a.c_col) )
@@ -3360,7 +3360,7 @@ static void Check_banned(std::string const &mask, int const row, std::vector<Vio
 
 // §3 키워드 위치 후보 — 기본 타입 키워드(닫힌 집합).
 static auto is_basic_type(std::string const &w)->bool{
-	static char const * const
+	static char const * const  
 		Types[]
 		= {
 			"void", "bool", "char", "char8_t", "char16_t", "char32_t", "wchar_t",
@@ -3426,7 +3426,7 @@ static void Check_unary_juxtaposition(
 	for(int i = 1; i + 1 < n; ++i){
 		char const sign = mask[ toks[i].col ];
 
-		bool const
+		bool const  
 			same_unary_pair
 			= toks[i].len == 1 && toks[i + 1].len == 1
 			&& (sign == '-' || sign == '+') && mask[ toks[i + 1].col ] == sign
@@ -3438,7 +3438,7 @@ static void Check_unary_juxtaposition(
 
 		Tk_cls const left = toks[i - 1].cls;
 
-		bool const
+		bool const  
 			first_is_unary
 			= left == Tk_cls::open_b || left == Tk_cls::sep || left == Tk_cls::bin_s
 		;
