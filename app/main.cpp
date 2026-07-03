@@ -227,11 +227,10 @@ static auto Range_to_lo_hi(Line_range const range, int &lo, int &hi)->void{
 	int const int_max = std::numeric_limits<int>::max();
 
 	lo = range.start > 1 ? static_cast<int>(range.start) - 1 : 0;
+
 	hi
-	= range.end >= static_cast<std::size_t>(int_max)
-	? int_max
-	: static_cast<int>(range.end) - 1
-	;
+	= range.end >= static_cast<std::size_t>(int_max) ? int_max
+	: static_cast<int>(range.end) - 1;
 }
 
 // 한 파일을 edit 한다. 자동교정·범위밖(manual) 기록을 출력하고, dry 가 아니면 원자적으로 쓴다.
