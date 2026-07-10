@@ -25,7 +25,7 @@ struct Violation{
 	int fix_val = 0;   // gap 은 목표 공백 수, indent 는 목표 탭 깊이
 };
 
-// 행들을 규약 검사해 위반을 낸다(§1.1·§1.2는 raw 행, §8.1·§3 등은 @마스크 위에서).
+// 행들을 규약 검사해 위반을 낸다(§1.1·§1.3는 raw 행, §8.2·§3 등은 @마스크 위에서).
 auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violation>;
 
 // edit 모드 한 항목의 기록: 자동교정했는지(fixed) 범위 밖이라 남겼는지(!fixed).
