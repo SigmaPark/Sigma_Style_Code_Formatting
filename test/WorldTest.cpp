@@ -50,12 +50,22 @@ auto wt::Tests(wchar_t const * const module_title) noexcept->bool{
 #include "cases/Test_Control_Brace_More.hpp"
 #include "cases/Test_Spacing.hpp"
 #include "cases/Test_Multiline_Bracket.hpp"
+#include "cases/Test_Empty_Bracket.hpp"
+#include "cases/Test_Bracket_Adjacency.hpp"
+#include "cases/Test_Comment_Tail.hpp"
+#include "cases/Test_Template_Header.hpp"
+#include "cases/Test_Operator_Name.hpp"
 
 static auto Test()->void{
 	sakt::Test_Control_Brace::test();
 	sakt::Test_Control_Brace_More::test();
 	sakt::Test_Spacing::test();
 	sakt::Test_Multiline_Bracket::test();
+	sakt::Test_Empty_Bracket::test();
+	sakt::Test_Bracket_Adjacency::test();
+	sakt::Test_Comment_Tail::test();
+	sakt::Test_Template_Header::test();
+	sakt::Test_Operator_Name::test();
 }
 
 auto main(int const, char const * const *)->int{
