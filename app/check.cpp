@@ -229,7 +229,9 @@ static auto Closer_of(char const open)->char{
 
 // §8.6 한 행 안 중첩 괄호의 안쪽 공백 (@마스크). ( ) [ ] { } 만 대상.
 // 같은 종류 중첩 단계로 n 결정: ()[] 는 n=단계, {} 는 n=단계+1.
-// < > 와 [[ ]] 와 다중행 괄호는 제외(에이전트 몫). 빈 괄호는 단계에서 뺀다.
+// < > 와 [[ ]] 와 다중행 괄호는 제외(에이전트 몫).
+// 내용 없는 괄호쌍(§8.6) — 안이 모두 공백이면 그 공백을 지우고(n=0, 중괄호도 예외 없음)
+// 중첩 단계에도 세지 않는다. 문자가 곧바로 인접한 빈 쌍은 검사할 것이 없어 그대로 지나친다.
 static void Check_inner_space(std::string const &mask, int const row, std::vector<Violation> &out){
 	struct Frame{
 		char open;
@@ -241,6 +243,7 @@ static void Check_inner_space(std::string const &mask, int const row, std::vecto
 		char open;
 		int from, to;
 		int stage;
+		bool blank;   // 안이 모두 공백 — 지워야 할 자리
 	};
 
 	int const n = static_cast<int>(mask.size());
@@ -295,11 +298,17 @@ static void Check_inner_space(std::string const &mask, int const row, std::vecto
 			stack.pop_back();
 
 			if(i > top.col + 1){
-				int const stage = top.child < 0 ? 0 : top.child + 1;
+				bool blank = true;
 
-				pairs.push_back({ top.open, top.col, i, stage });
+				for(int cc = top.col + 1; cc < i && blank; ++cc){
+					blank = mask[cc] == ' ';
+				}
 
-				int k = static_cast<int>(stack.size()) - 1;
+				int const stage = blank || top.child < 0 ? 0 : top.child + 1;
+
+				pairs.push_back({ top.open, top.col, i, stage, blank });
+
+				int k = blank ? -1 : static_cast<int>(stack.size()) - 1;
 
 				while(k >= 0){
 					if(stack[k].open == top.open){
@@ -327,8 +336,14 @@ static void Check_inner_space(std::string const &mask, int const row, std::vecto
 	}
 
 	for(Pair const &pr : pairs){
-		int const want = pr.open == '{' ? pr.stage + 1 : pr.stage;
-		std::string const msg = "inner space must be " + std::to_string(want);
+		int const want = pr.blank ? 0 : pr.open == '{' ? pr.stage + 1 : pr.stage;
+
+		std::string const
+			msg
+			= pr.blank
+			? std::string("empty bracket pair must have no inner space")
+			: "inner space must be " + std::to_string(want)
+		;
 
 		int after = 0;
 
@@ -555,13 +570,19 @@ static void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Viola
 	}
 }
 
-// §8.5 비기호형↔괄호 경계 공백 (@마스크, 같은 행).
+// §8.5 비기호형 토큰과 괄호의 공백 (@마스크, 같은 행).
 // 단어 다음 여는괄호 ((·[·{) 사이의 공백 = 위반.
 // 닫는괄호 ())·]·}) 다음에 단어가 무공백으로 붙으면 = 위반.
+// 인접한 두 단어 사이 공백은 정확히 한 칸(v2.2.0).
+// 닫는괄호 다음에 여는괄호가 오면 그 사이 공백 = 위반(v2.2.0) — 앞의 닫는 괄호까지를 하나의
+// 피연산 토큰으로 보고 그 뒤에서 새 괄호가 열리는 자리다(호출·첨자의 연쇄, 람다).
 // 꺾쇠 < > 는 비교/꺾쇠 모호성 탓에 sak 보수 영역에서 제외(§5.1·범주 4).
 static void Check_word_paren_space(
 	std::string const &mask, int const row, std::vector<Violation> &out
 ){
+	auto const is_open = [](char const ch)->bool{ return ch == '(' || ch == '[' || ch == '{'; };
+	auto const is_close = [](char const ch)->bool{ return ch == ')' || ch == ']' || ch == '}'; };
+
 	int const n = static_cast<int>(mask.size());
 	int p = 0;
 
@@ -573,7 +594,7 @@ static void Check_word_paren_space(
 		char const c = mask[p];
 
 		if( ::is_word_char(c) ){
-			int const  
+			int const
 				e
 				= [n, &mask](int res){
 					for( ; res < n && ::is_word_char(mask[res]); ++res ){}
@@ -588,10 +609,17 @@ static void Check_word_paren_space(
 				}(e)
 			;
 
-			if( q > e && q < n && (mask[q] == '(' || mask[q] == '[' || mask[q] == '{') ){
+			if( q > e && q < n && is_open(mask[q]) ){
 				::Push_fix(
 					out, { row, e, "8.5", "space between word and opening bracket" },
 					Fix_kind::gap_right, e, 0
+				);
+			}
+
+			if( q - e > 1 && q < n && ::is_word_char(mask[q]) ){
+				::Push_fix(
+					out, { row, e, "8.5", "words must be separated by exactly one space" },
+					Fix_kind::gap_right, e, 1
 				);
 			}
 
@@ -600,11 +628,29 @@ static void Check_word_paren_space(
 			continue;
 		}
 
-		if( (c == ')' || c == ']' || c == '}') && p + 1 < n && ::is_word_char(mask[p + 1]) ){
-			::Push_fix(
-				out, { row, p + 1, "8.5", "missing space between closing bracket and word" },
-				Fix_kind::gap_left, p + 1, 1
-			);
+		if( is_close(c) ){
+			if( p + 1 < n && ::is_word_char(mask[p + 1]) ){
+				::Push_fix(
+					out, { row, p + 1, "8.5", "missing space between closing bracket and word" },
+					Fix_kind::gap_left, p + 1, 1
+				);
+			}
+
+			int const
+				q
+				= [n, &mask](int res){
+					for(; res < n && mask[res] == ' '; ++res){}
+
+					return res;
+				}(p + 1)
+			;
+
+			if( q > p + 1 && q < n && is_open(mask[q]) ){
+				::Push_fix(
+					out, { row, p + 1, "8.5", "no space between closing and opening bracket" },
+					Fix_kind::gap_right, p + 1, 0
+				);
+			}
 		}
 
 		++p;
@@ -3503,9 +3549,70 @@ static void Check_unary_juxtaposition(
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
+// §9.3 템플릿 헤더의 닫는 꺾쇠 뒤에는 단일행·다중행을 불문하고 반드시 개행을 둔다(v2.2.0).
+// 여는 `<` 바로 앞이 `template` 단어인 짝만 헤더로 보고, 닫는 `>` 가 그 행의 마지막 의미
+// 토큰인지 검사한다(행끝 주석은 §2 제외 대상이라 마스크에서 `@` — 마지막 토큰 판정에 무해).
+static void Check_template_header_newline(
+	Lines const &mask, Angle_pair const &a, std::vector<Violation> &out
+){
+	static char const *const Kw = "template";
+	int const kw_len = 8;
+
+	if(a.o_col < kw_len){
+		return;
+	}
+
+	std::string const &m = mask[a.o_row];
+
+	for(int i = 0; i < kw_len; ++i){
+		if(m[a.o_col - kw_len + i] != Kw[i]){
+			return;
+		}
+	}
+
+	if( a.o_col > kw_len && ::is_word_char(m[a.o_col - kw_len - 1]) ){
+		return;
+	}
+
+	if( ::Last_significant_col(mask[a.c_row]) != a.c_col ){
+		out.push_back(
+			{ a.c_row, a.c_col, "9.3", "newline required after template header" }
+		);
+	}
+}
+
+// §8.3 잉여공백은 "§2 제외 대상인 주석을 걷어낸 뒤의 행"에서 잰다(v2.2.0). 그래야 행끝 주석이
+// 붙은 행에서도 잉여공백과 §5.5 2칸 마커를 볼 수 있다. 행 끝까지 이어지는 주석 세그먼트를 잘라
+// 낸 사본을 만든다 — 문자열 리터럴 꼬리는 코드이므로 자르지 않는다.
+static auto Cut_tail_comment(Lines const &src, Seg_lines const &segs)->Lines{
+	Lines out = src;
+
+	int const  
+		rows = static_cast<int>(out.size()),
+		seg_rows = static_cast<int>(segs.size())
+	;
+
+	for(int r = 0; r < rows && r < seg_rows; ++r){
+		if(segs[r].empty()){
+			continue;
+		}
+
+		Segment const &last = segs[r].back();
+		int const len = static_cast<int>(out[r].size());
+
+		if(last.kind == Seg_kind::comment && last.col <= len){
+			out[r] = out[r].substr( 0, static_cast<std::size_t>(last.col) );
+		}
+	}
+
+	return out;
+}
+
 auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violation>{
 	std::vector<Violation> out;
 	Lines const mask = ::render_mask(lines, segs);
+	Lines const cut_lines = ::Cut_tail_comment(lines, segs);
+	Lines const cut_mask = ::Cut_tail_comment(mask, segs);
 	int const rows = static_cast<int>(lines.size());
 
 	std::vector<Bk_pair> const pairs = ::Match_brackets(mask);
@@ -3519,10 +3626,10 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	::Check_hidden_brace(lines, mask, pairs, out);
 	::Check_anchor_keyword_semicolon(lines, mask, out);
 	::Check_anchor_trailing_return(lines, mask, out);
-	::Check_anchor_inline_type(lines, mask, pairs, out);
+	::Check_anchor_inline_type(cut_lines, cut_mask, pairs, out);
 	::Check_anchor_case(lines, mask, out);
 	::Check_anchor_colon_vbracket(lines, mask, out);
-	::Check_anchor_var_decl_marker(lines, mask, out);
+	::Check_anchor_var_decl_marker(cut_lines, cut_mask, out);
 
 	std::vector<Angle_pair> angles = ::Match_template_cast_angles(mask);
 	std::vector<Angle_pair> const closer_angles = ::Match_closer_anchored_angles(mask);
@@ -3534,6 +3641,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		::Check_angle_close_last(mask, a, out);
 		::Check_angle_boundary(mask, a, out);
 		::Check_angle_inner_space(mask, angles, a, out);
+		::Check_template_header_newline(mask, a, out);
 	}
 
 	for(int row = 0; row < rows; ++row){
