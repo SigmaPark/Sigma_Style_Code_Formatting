@@ -227,10 +227,10 @@ static auto Closer_of(char const open)->char{
 	return '}';
 }
 
-// §8.6 한 행 안 중첩 괄호의 안쪽 공백 (@마스크). ( ) [ ] { } 만 대상.
+// §8.5 한 행 안 중첩 괄호의 안쪽 공백 (@마스크). ( ) [ ] { } 만 대상.
 // 같은 종류 중첩 단계로 n 결정: ()[] 는 n=단계, {} 는 n=단계+1.
 // < > 와 [[ ]] 와 다중행 괄호는 제외(에이전트 몫).
-// 내용 없는 괄호쌍(§8.6) — 안이 모두 공백이면 그 공백을 지우고(n=0, 중괄호도 예외 없음)
+// 내용 없는 괄호쌍(§8.5) — 안이 모두 공백이면 그 공백을 지우고(n=0, 중괄호도 예외 없음)
 // 중첩 단계에도 세지 않는다. 문자가 곧바로 인접한 빈 쌍은 검사할 것이 없어 그대로 지나친다.
 static void Check_inner_space(std::string const &mask, int const row, std::vector<Violation> &out){
 	struct Frame{
@@ -255,7 +255,7 @@ static void Check_inner_space(std::string const &mask, int const row, std::vecto
 	while(i < n){
 		char const c = mask[i];
 
-		// [[ ... ]] 어트리뷰트는 별도 괄호류라 §8.6 공식 밖 → 통째로 건너뛴다.
+		// [[ ... ]] 어트리뷰트는 별도 괄호류라 §8.5 공식 밖 → 통째로 건너뛴다.
 		if(c == '[' && i + 1 < n && mask[i + 1] == '['){
 			int j = i + 2;
 
@@ -358,11 +358,11 @@ static void Check_inner_space(std::string const &mask, int const row, std::vecto
 		}
 
 		if(after != want){
-			::Push_fix(out, { row, pr.from, "8.6", msg }, Fix_kind::gap_right, pr.from + 1, want);
+			::Push_fix(out, { row, pr.from, "8.5", msg }, Fix_kind::gap_right, pr.from + 1, want);
 		}
 
 		if(before != want){
-			::Push_fix(out, { row, pr.to, "8.6", msg }, Fix_kind::gap_left, pr.to, want);
+			::Push_fix(out, { row, pr.to, "8.5", msg }, Fix_kind::gap_left, pr.to, want);
 		}
 	}
 }
@@ -570,7 +570,7 @@ static void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Viola
 	}
 }
 
-// §8.5 비기호형 토큰과 괄호의 공백 (@마스크, 같은 행).
+// §8.4 부착 법칙 — 비기호형 토큰과 괄호의 간격 (@마스크, 같은 행).
 // 단어 다음 여는괄호 ((·[·{) 사이의 공백 = 위반.
 // 닫는괄호 ())·]·}) 다음에 단어가 무공백으로 붙으면 = 위반.
 // 인접한 두 단어 사이 공백은 정확히 한 칸(v2.2.0).
@@ -611,14 +611,14 @@ static void Check_word_paren_space(
 
 			if( q > e && q < n && is_open(mask[q]) ){
 				::Push_fix(
-					out, { row, e, "8.5", "space between word and opening bracket" },
+					out, { row, e, "8.4", "space between word and opening bracket" },
 					Fix_kind::gap_right, e, 0
 				);
 			}
 
 			if( q - e > 1 && q < n && ::is_word_char(mask[q]) ){
 				::Push_fix(
-					out, { row, e, "8.5", "words must be separated by exactly one space" },
+					out, { row, e, "8.4", "words must be separated by exactly one space" },
 					Fix_kind::gap_right, e, 1
 				);
 			}
@@ -631,7 +631,7 @@ static void Check_word_paren_space(
 		if( is_close(c) ){
 			if( p + 1 < n && ::is_word_char(mask[p + 1]) ){
 				::Push_fix(
-					out, { row, p + 1, "8.5", "missing space between closing bracket and word" },
+					out, { row, p + 1, "8.4", "missing space between closing bracket and word" },
 					Fix_kind::gap_left, p + 1, 1
 				);
 			}
@@ -647,7 +647,7 @@ static void Check_word_paren_space(
 
 			if( q > p + 1 && q < n && is_open(mask[q]) ){
 				::Push_fix(
-					out, { row, p + 1, "8.5", "no space between closing and opening bracket" },
+					out, { row, p + 1, "8.4", "no space between closing and opening bracket" },
 					Fix_kind::gap_right, p + 1, 0
 				);
 			}
@@ -680,7 +680,7 @@ static auto First_significant_col(std::string const &mask_row)->int{
 	return p < n ? p : -1;
 }
 
-// §9.3 비기호형 토큰의 개행 제한 — 닫는 ')' + 단어 다음 행 형태만 (@마스크).
+// §9.3 개행의 발생원 — 발생원 목록 밖의 개행. 닫는 ')' + 단어 다음 행 형태만 (@마스크).
 // row 의 마지막 의미 토큰이 ')' 이고 *다음 행*(공행 건너지 않음) 첫 의미 토큰이 단어면 위반.
 // 그 외 형태(단어 + 단어, 단어 + 여는괄호, '}' + 단어, 공행으로 분리된 두 토큰,
 //   가상괄호 발현 자리 등)는 §5.5 변수선언/using/return 등의 다중행 합법 발현과
@@ -1348,8 +1348,9 @@ static void Check_token_space(
 		switch(t.cls){
 		case Tk_cls::sep:
 			{
-				// `for(init;;++itr2)` 처럼 `;` 두 개가 연속하면 그 사이는 공백 1 필수
-				// (spec §8.4 SEP 항 예외). `,` 끼리·`,`+`;` 혼합은 일반 SEP 룰을 그대로 따른다.
+				// `for(init;;++itr2)` 처럼 `;` 두 개가 연속하면 그 사이는 공백 1 필수 —
+				// 종결할 내용이 비어 부착 요구가 소멸하고 기본 간격이 남는다(§8.4).
+				// `,` 끼리·`,`+`;` 혼합은 일반 SEP 룰을 그대로 따른다.
 				bool const  
 					semi_chain
 					= t.len == 1 && mask[t.col] == ';'
@@ -3289,7 +3290,7 @@ static void Check_angle_close_last(
 	}
 }
 
-// §8.5 경계 공백 — 여는 `<` 직전 word 는 무공백, 닫는 `>` 직후 word 는 공백·`(` `[` 은 무공백.
+// §8.4 경계 공백 — 여는 `<` 직전 word 는 무공백, 닫는 `>` 직후 word 는 공백·`(` `[` 은 무공백.
 static void Check_angle_boundary(
 	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
 ){
@@ -3308,7 +3309,7 @@ static void Check_angle_boundary(
 
 			if( q >= 0 && ::is_word_char(o_line[q]) ){
 				::Push_fix(
-					out, { p.o_row, p.o_col, "8.5", "angle: space between word and '<'" },
+					out, { p.o_row, p.o_col, "8.4", "angle: space between word and '<'" },
 					Fix_kind::gap_left, p.o_col, 0
 				);
 			}
@@ -3333,21 +3334,21 @@ static void Check_angle_boundary(
 	if(nx == '(' || nx == '['){
 		if(has_space){
 			::Push_fix(
-				out, { p.c_row, p.c_col + 1, "8.5", "angle: space between '>' and '(' or '['" },
+				out, { p.c_row, p.c_col + 1, "8.4", "angle: space between '>' and '(' or '['" },
 				Fix_kind::gap_right, p.c_col + 1, 0
 			);
 		}
 	} else if( ::is_word_char(nx) ){
 		if(!has_space){
 			::Push_fix(
-				out, { p.c_row, p.c_col + 1, "8.5", "angle: '>' and word need one space" },
+				out, { p.c_row, p.c_col + 1, "8.4", "angle: '>' and word need one space" },
 				Fix_kind::gap_right, p.c_col + 1, 1
 			);
 		}
 	}
 }
 
-// §8.6 안쪽 공백 n — 단일행 꺾쇠는 자기 안 최대 중첩 단계 +1 (자기 자리 포함).
+// §8.5 안쪽 공백 n — 단일행 꺾쇠는 자기 안 최대 중첩 단계 +1 (자기 자리 포함).
 // pairs 전체를 참조해 이 pair 안에 몇 겹의 단일행 꺾쇠가 있는지 센다.
 static void Check_angle_inner_space(
 	Lines const &mask, std::vector<Angle_pair> const &pairs,
@@ -3421,14 +3422,14 @@ static void Check_angle_inner_space(
 
 	if(left != n){
 		::Push_fix(
-			out, { p.o_row, p.o_col + 1, "8.6", "angle: inner space must be N" },
+			out, { p.o_row, p.o_col + 1, "8.5", "angle: inner space must be N" },
 			Fix_kind::gap_right, p.o_col + 1, n
 		);
 	}
 
 	if(right != n){
 		::Push_fix(
-			out, { p.o_row, p.c_col - right, "8.6", "angle: inner space must be N" },
+			out, { p.o_row, p.c_col - right, "8.5", "angle: inner space must be N" },
 			Fix_kind::gap_left, p.c_col, n
 		);
 	}
@@ -3551,7 +3552,7 @@ static void Check_unary_juxtaposition(
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
-// §9.3 템플릿 헤더의 닫는 꺾쇠 뒤에는 단일행·다중행을 불문하고 반드시 개행을 둔다(v2.2.0).
+// §5.7 템플릿 헤더의 닫는 꺾쇠 뒤에는 단일행·다중행을 불문하고 반드시 개행을 둔다.
 // 여는 `<` 바로 앞이 `template` 단어인 짝만 헤더로 보고, 닫는 `>` 가 그 행의 마지막 의미
 // 토큰인지 검사한다(행끝 주석은 §2 제외 대상이라 마스크에서 `@` — 마지막 토큰 판정에 무해).
 static void Check_template_header_newline(
@@ -3578,7 +3579,7 @@ static void Check_template_header_newline(
 
 	if( ::Last_significant_col(mask[a.c_row]) != a.c_col ){
 		out.push_back(
-			{ a.c_row, a.c_col, "9.3", "newline required after template header" }
+			{ a.c_row, a.c_col, "5.7", "newline required after template header" }
 		);
 	}
 }
@@ -4204,7 +4205,7 @@ static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 // 확정된 짝뿐이다.
 //
 // 괄호 안에 든 꺾쇠도 스택이 그대로 세므로(레거시 역스캔은 `(...)` 를 통째로 건너뛰었다),
-// §8.6 의 중첩 단계도 이제 정확하다.
+// §8.5 의 중첩 단계도 이제 정확하다.
 static auto Adjudicated_angles(std::vector<Adj_tok> const &toks)->std::vector<Angle_pair>{
 	std::vector<Angle_pair> out;
 	std::vector<int> stack;
@@ -4248,7 +4249,7 @@ static void Check_adjudicated_space(
 			continue;
 		}
 
-		// 꺾쇠는 괄호다 — §5.4·§5.7·§8.5·§8.6 이 맡는다.
+		// 꺾쇠는 괄호다 — §5.4·§5.7·§8.4·§8.5 이 맡는다.
 		if(t.cls == Adj_cls::angle_open || t.cls == Adj_cls::angle_close){
 			continue;
 		}
@@ -4901,7 +4902,7 @@ static void Check_qualifier_prefix(
 // 키워드고, 후행반환은 `->`, 인라인 타입은 `}`, 그리고 **변수 선언문은 2칸 마커**(§5.5, v2.2.0
 // 부터 의무)다. 그러므로 키워드도 마커도 없는 단어↔단어 개행은 **어느 해석으로도 위반**이다 —
 // 변수 선언이면 마커를 빠뜨린 것(§5.5)이고, 아니면 인접한 두 비기호형 토큰 사이에 개행을 둔
-// 것(§9.3)이다. 어느 쪽이든 위반이므로 위양성 없이 확정할 수 있다.
+// 것(§9.3 — 발생원 목록 밖의 개행)이다. 어느 쪽이든 위반이므로 위양성 없이 확정할 수 있다.
 static void Check_unmarked_wrap(
 	Lines const &cut_lines, Lines const &cut_mask, std::vector<Violation> &out
 ){
