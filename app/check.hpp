@@ -17,7 +17,7 @@
 //   indent    — 그 행의 선두 공백·탭 구역을 fix_val 개의 탭으로 맞춘다.
 enum class Fix_kind{ none, gap_left, gap_right, indent };
 
-// §4.2 충돌 사각 — 표기만으로 분류를 확정할 수 없는 자리는 위반으로 단정하지 않고 용의로 지목한다.
+// 충돌 사각 — 표기만으로 분류를 확정할 수 없는 자리는 위반으로 단정하지 않고 용의로 지목한다.
 //   violation — 확정 위반. 종료코드에 반영하고 edit 이 자동교정을 시도한다.
 //   suspect   — 용의. 사람의 판정 몫이라 종료코드에 넣지 않고 edit 도 손대지 않는다.
 enum class V_cat{ violation, suspect };
@@ -34,7 +34,7 @@ struct Violation{
 // 행들을 규약 검사해 위반을 낸다(§1.1·§1.3는 raw 행, §8.2·§3 등은 @마스크 위에서).
 auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violation>;
 
-// 검증용 렌더러 — §4.2 판정 스트림을 토큰마다 한 행씩 덤프한다("행:열 분류 우선순위 원문").
+// 검증용 렌더러 — 표기 판정 스트림을 토큰마다 한 행씩 덤프한다("행:열 분류 우선순위 원문").
 auto render_classes(Lines const &lines, Seg_lines const &segs)->Lines;
 
 // edit 모드 한 항목의 기록: 자동교정했는지(fixed) 범위 밖이라 남겼는지(!fixed).

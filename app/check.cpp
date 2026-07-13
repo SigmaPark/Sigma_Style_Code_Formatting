@@ -3583,14 +3583,14 @@ static void Check_template_header_newline(
 	}
 }
 
-// §4.2 분류의 판정 — 파일 전역 토큰 스트림.
+// 표기 판정 — 파일 전역 토큰 스트림.
 //
 // Tokenize_8_3(§8.4) 은 한 행만 보고, 문맥 의존 글리프(* & + - < > : && << >> :: ! ~ ...)를
 // skip 으로 남긴다. 그 위에 파일 전역 스트림을 얹어 두 가지를 더 본다.
 //   (1) 문자열·문자 리터럴을 피연산 토큰(lit)으로 실체화한다 — @마스크만 보면 "s" + x 의 "+" 가
 //       왼쪽 피연산자를 잃어 부호로 오판된다.
 //   (2) 행을 넘는 이웃을 본다 — §9.1·§9.2 는 두 행 창에서 판정된다.
-// 이 구역은 스트림만 만든다. 실제 판정(§4.2 술어)은 Adjudicate_tokens 의 몫이다.
+// 이 구역은 스트림만 만든다. 실제 판정(표기 판정 술어)은 Adjudicate_tokens 의 몫이다.
 enum class Adj_cls{
 	word, // 식별자·키워드
 	lit, // 문자열·문자 리터럴 — 피연산자
@@ -3617,7 +3617,7 @@ struct Adj_tok{
 	Tk_cls lex;
 	Adj_cls cls;
 	Prio prio;
-	bool suspect; // §4.2 충돌 사각 위에 선 판정
+	bool suspect; // 충돌 사각 위에 선 판정
 	int gl, gr; // 인접 공백 폭(행을 넘으면 개행이 공백을 대신하므로 1). 이웃이 없으면 -1
 	int el, er; // §5.3 투명성을 적용한 유효 이웃의 인덱스(감싸는 괄호는 이웃이 아니다). 없으면 -1
 };
@@ -3731,7 +3731,7 @@ static auto Is_literal_seg(Seg_kind const kind)->bool{
 	;
 }
 
-// 파일 전체를 §4.2 판정용 토큰열로 만든다(행 순서·열 순서). 전처리행은 통째로 뺀다.
+// 파일 전체를 표기 판정용 토큰열로 만든다(행 순서·열 순서). 전처리행은 통째로 뺀다.
 static auto Tokenize_file(Lines const &mask, Seg_lines const &segs)->std::vector<Adj_tok>{
 	std::vector<Adj_tok> out;
 	int const rows = static_cast<int>(mask.size());
@@ -3786,7 +3786,7 @@ static auto Tokenize_file(Lines const &mask, Seg_lines const &segs)->std::vector
 	return out;
 }
 
-// 키워드는 피연산자 꼬리·머리가 아니다(§4.2). 피연산자로 서는 true·false·nullptr·this 는 뺀다.
+// 키워드는 피연산자 꼬리·머리가 아니다. 피연산자로 서는 true·false·nullptr·this 는 뺀다.
 static auto Is_keyword(std::string const &w)->bool{
 	static char const * const  
 		Words[]
@@ -3814,7 +3814,7 @@ static auto Is_keyword(std::string const &w)->bool{
 	return false;
 }
 
-// 단항으로 표현식을 열 수 있는 기호형 토큰인가 — 피연산자 머리 판정에 쓴다(§4.2).
+// 단항으로 표현식을 열 수 있는 기호형 토큰인가 — 피연산자 머리 판정에 쓴다.
 static auto Is_unary_prefix(std::string const &t)->bool{
 	return
 		t == "*" || t == "&" || t == "&&" || t == "+" || t == "-"
@@ -3822,7 +3822,7 @@ static auto Is_unary_prefix(std::string const &t)->bool{
 	;
 }
 
-// §4.2 충돌 사각 — 표기만으로 분류를 확정할 수 없는 자리를 용의로 표시한다. 규약이 공표한
+// 충돌 사각 — 표기만으로 분류를 확정할 수 없는 자리를 용의로 표시한다. 규약이 공표한
 // 네 꼴 중 어휘로 가려낼 수 있는 것을 잡는다.
 //   (1)(2) 선언이 올 수 있는 자리의 `단어 * 단어` — 잘못 띄어 쓴 선언과 옳게 쓴 연산이 동형.
 //   (3) `단어 < 단어 > 단어` — 잘못 벌려 쓴 인스턴스화와 옳게 쓴 비교 연쇄가 동형.
@@ -3937,7 +3937,7 @@ static void Mark_suspects(
 	}
 }
 
-// §4.2 판정 — 표기(좌우 공백의 유무와 인접 토큰)로 문맥 의존 글리프의 §4 분류를 확정한다.
+// 표기 판정 — 표기(좌우 공백의 유무와 인접 토큰)로 문맥 의존 글리프의 §4 분류를 확정한다.
 // 어느 분류의 합법 표기와도 맞지 않는 자리는 unresolved 로 남는다(§8.4 위반 — S3 이 발화).
 static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 	int const n = static_cast<int>(toks.size());
@@ -3975,7 +3975,7 @@ static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 		}
 	;
 
-	// 피연산자 머리 — 오른쪽에서 피연산자를 이루며 시작할 수 있는 것(§4.2).
+	// 피연산자 머리 — 오른쪽에서 피연산자를 이루며 시작할 수 있는 것.
 	auto const  
 		is_head
 		= [&toks](int const j)->bool{
@@ -4194,12 +4194,12 @@ static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 	}
 }
 
-// §4.2 판정이 확정한 꺾쇠 짝을 뽑는다.
+// 표기 판정이 확정한 꺾쇠 짝을 뽑는다.
 //
 // 레거시 매처(Match_template_cast_angles·Match_closer_anchored_angles)는 꺾쇠임이 **문법으로**
 // 확정되는 자리 — `template`·`*_cast` 키워드 앵커, 그리고 닫는 `>` 뒤의 닫힘 신호 — 만 잡을 수
 // 있었다. 그래서 `std::vector<int> v;` 나 `std::is_same<A, B>::value` 처럼 가장 흔한 자리를
-// 통째로 놓쳤다. §4.2 는 그 자리를 **표기로** 확정한다 — `vector<` 가 붙어 있다는 사실 자체가
+// 통째로 놓쳤다. 표기 판정은 그 자리를 **표기로** 확정한다 — `vector<` 가 붙어 있다는 사실 자체가
 // 꺾쇠라는 선언이다. 짝을 잃은 여는 꺾쇠는 이미 unresolved 로 물려 있으므로, 여기 남는 것은
 // 확정된 짝뿐이다.
 //
@@ -4232,14 +4232,14 @@ static auto Is_no_space_bidir(std::string const &t)->bool{
 	return t == "::" || t == "." || t == "->" || t == ".*" || t == "->*";
 }
 
-// §8.4 — §4.2 로 판정된 문맥 의존 토큰의 공백.
+// §8.4 — 표기 판정으로 분류된 문맥 의존 토큰의 공백.
 //
-// 표기가 곧 분류이므로(§4.2), 어느 분류의 합법 표기와도 맞지 않는 자리(unresolved)는 그 자체로
+// 표기가 곧 분류이므로(표기 판정), 어느 분류의 합법 표기와도 맞지 않는 자리(unresolved)는 그 자체로
 // 위반이다. 반면 분류가 표기가 아니라 **이웃의 정체**로 정해지는 토큰(`+` `-` `::` `:` `!` `~`
 // `<<`)은 표기가 그 분류의 요구와 어긋날 수 있어 따로 검사한다.
 //
 // 자동교정 힌트는 달지 않는다 — 이 자리의 공백은 분류를 싣는 신호여서, 기계가 그 유무를 뒤집는
-// 것은 서식 교정이 아니라 코드의 의미 선언을 바꾸는 일이다(§4.2 도구에 대한 요구).
+// 것은 서식 교정이 아니라 코드의 의미 선언을 바꾸는 일이다(신호 공백 불가침).
 static void Check_adjudicated_space(
 	std::vector<Adj_tok> const &toks, std::vector<Violation> &out
 ){
@@ -4257,7 +4257,7 @@ static void Check_adjudicated_space(
 			out.push_back(
 				{
 					t.row, t.col, "8.4",
-					"'" + t.text + "': spacing matches no legal token class (4.2)"
+					"'" + t.text + "': spacing matches no legal token class"
 				}
 			);
 
@@ -4379,7 +4379,7 @@ static void Check_adjudicated_space(
 // 은 앞뒤에 공백을 넣은 뒤 같은 방식을 적용하므로, 개행 후에도 그 공백이 유지된다.
 //
 // 세미콜론과 괄호(꺾쇠 포함)의 자리는 §5.4·§5.5 가 정하므로 여기서 보지 않는다.
-// 용의(§4.2) 위에 선 판정은 그 판정보다 확실할 수 없으므로 함께 용의로 내린다.
+// 용의 위에 선 판정은 그 판정보다 확실할 수 없으므로 함께 용의로 내린다.
 static void Check_break_form(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
 	int const n = static_cast<int>(toks.size());
 
@@ -4813,7 +4813,7 @@ static void Check_operator_blank_line(
 	}
 }
 
-// §3 단항 연산자 병기 — 첫 부호가 단항으로 판정되면(§4.2) 그 뒤에 같은 부호가 이어질 수 없다.
+// §3 단항 연산자 병기 — 첫 부호가 단항으로 판정되면 그 뒤에 같은 부호가 이어질 수 없다.
 // 이중 부정은 `- -x` 가 아니라 `-(-x)` 다. 문맥 불변 자리는 Check_unary_juxtaposition 이 이미
 // 보므로, 여기서는 판정이 있어야만 보이는 자리(앞이 키워드인 경우 등)를 마저 본다.
 static void Check_unary_pair(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
@@ -5110,7 +5110,7 @@ static void Check_glued_declarator(
 	}
 }
 
-// §4.2 충돌 사각 — 확정 위반이 아니라 용의로 지목해 사람의 판정에 넘긴다.
+// 충돌 사각 — 확정 위반이 아니라 용의로 지목해 사람의 판정에 넘긴다.
 static void Check_suspects(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
 	for(Adj_tok const &t : toks){
 		if(!t.suspect){
@@ -5119,7 +5119,7 @@ static void Check_suspects(std::vector<Adj_tok> const &toks, std::vector<Violati
 
 		Violation  
 			v{
-				t.row, t.col, "4.2",
+				t.row, t.col, "8.4",
 				"'" + t.text + "': notation cannot settle this — declaration or operator?"
 			}
 		;
@@ -5251,11 +5251,11 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	::Check_anchor_colon_vbracket(lines, mask, out);
 	::Check_anchor_var_decl_marker(cut_lines, cut_mask, out);
 
-	// §4.2 판정 — 꺾쇠 검사보다 먼저 돌린다. 꺾쇠의 정체는 이제 표기가 판정하기 때문이다.
+	// 표기 판정 — 꺾쇠 검사보다 먼저 돌린다. 꺾쇠의 정체는 이제 표기가 판정하기 때문이다.
 	std::vector<Adj_tok> toks = ::Tokenize_file(mask, segs);
 	::Adjudicate_tokens(toks);
 
-	// 꺾쇠 짝은 세 출처를 합친다 — 레거시 키워드 앵커·닫힘 신호 앵커에, §4.2 판정이 확정한
+	// 꺾쇠 짝은 세 출처를 합친다 — 레거시 키워드 앵커·닫힘 신호 앵커에, 표기 판정이 확정한
 	// 짝(나체 꺾쇠·괄호 속 중첩 꺾쇠까지)을 얹는다.
 	std::vector<Angle_pair> angles = ::Match_template_cast_angles(mask);
 	std::vector<Angle_pair> const closer_angles = ::Match_closer_anchored_angles(mask);
@@ -5289,7 +5289,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	}
 	//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
-	// 2패스 — §4.2 판정에 기대는 검사. 1패스(문맥 불변)에서 이미 위반이 난 행은 배치를 믿을 수
+	// 2패스 — 표기 판정에 기대는 검사. 1패스(문맥 불변)에서 이미 위반이 난 행은 배치를 믿을 수
 	// 없으므로 그 행에서는 침묵한다(연쇄 오염 차단).
 	std::vector<Violation> pass2;
 	::Check_adjudicated_space(toks, pass2);
@@ -5339,7 +5339,7 @@ struct Edit_op{
 	Fix_kind kind;
 };
 
-// 그 경계의 공백이 §4.2 판정에 참여하는 신호인가 — 문맥 의존 글리프의 좌우 경계에 붙은 공백 런.
+// 그 경계의 공백이 표기 판정에 참여하는 신호인가 — 문맥 의존 글리프의 좌우 경계에 붙은 공백 런.
 static auto Is_signal_gap(
 	std::vector<Adj_tok> const &toks, int const row, int const col, Fix_kind const kind
 )->bool{
@@ -5435,7 +5435,7 @@ auto edit_lines(Lines const &input, int const lo, int const hi)->Edit_result{
 		Seg_lines const segs = ::scan_lines(lines);
 		std::vector<Violation> const viol = ::check_lines(lines, segs);
 
-		// 신호 공백 불가침(§4.2) — 판정에 참여하는 공백의 유무를 자동교정이 뒤집어선 안 된다.
+		// 신호 공백 불가침 — 판정에 참여하는 공백의 유무를 자동교정이 뒤집어선 안 된다.
 		Lines const mask = ::render_mask(lines, segs);
 		std::vector<Adj_tok> toks = ::Tokenize_file(mask, segs);
 		::Adjudicate_tokens(toks);
@@ -5443,7 +5443,7 @@ auto edit_lines(Lines const &input, int const lo, int const hi)->Edit_result{
 		std::vector<Edit_op> ops;
 
 		for(Violation const &v : viol){
-			// 용의(§4.2)는 확정 판정이 아니므로 자동교정 대상이 아니다 — 손대지 않는다.
+			// 용의는 확정 판정이 아니므로 자동교정 대상이 아니다 — 손대지 않는다.
 			if(
 				v.cat != V_cat::violation || v.fix == Fix_kind::none
 				|| v.row < lo || v.row > hi

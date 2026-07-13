@@ -152,7 +152,7 @@ static auto Parse_line_range(std::string const &s, Line_range &out)->bool{
 }
 
 // 한 파일을 검사해 위반을 출력하고, 위반 개수를 돌려준다. 범위 밖의 위반은 건너뛴다.
-// 용의(§4.2)는 [suspect] 로 함께 출력하되 반환값(=종료코드)에 넣지 않고 suspects 로만 센다.
+// 용의는 [suspect] 로 함께 출력하되 반환값(=종료코드)에 넣지 않고 suspects 로만 센다.
 static auto Check_file(
 	std::string const &path, Line_range const range, std::size_t &suspects
 )->std::size_t{
@@ -186,7 +186,7 @@ static auto Check_file(
 	return hits;
 }
 
-// 검증용 — §4.2 판정 스트림을 그대로 덤프한다(개발자 진단용 숨은 플래그).
+// 검증용 — 표기 판정 스트림을 그대로 덤프한다(개발자 진단용 숨은 플래그).
 static void Dump_classes(std::string const &path){
 	Lines const lines = ::Read_lines(path);
 	Seg_lines const segs = ::scan_lines(lines);
