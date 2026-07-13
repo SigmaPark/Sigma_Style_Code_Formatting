@@ -2,7 +2,7 @@
      SPDX-License-Identifier: MIT
 -->
 
-# Sigma 코드 서식 규약 (C++ / CUDA) — Version 3.0.0
+# Sigma 코드 서식 규약 (C++ / CUDA) — Version 3.0.1
 
 본 문서는 C++ 및 CUDA 소스 코드의 서식 규약을 정의한다. 
 
