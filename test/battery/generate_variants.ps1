@@ -40,6 +40,9 @@ Rewrite the sample below as VARIANT $v of $Variants, applying ONLY these changes
 - reword the contents of string literals (keep any leading/trailing spaces inside them)
 Hard rules you must not break:
 - never rename C++ keywords (if, else, do, while, try, catch, return, struct, class, new, ...)
+- never reorder keywords or qualifiers: 'char const' must stay 'char const', never 'const char'
+- never insert or delete a single space or tab anywhere in the code, including before '(' and
+  inside lambdas -- whitespace must be byte-identical to the sample, trailing spaces included
 - keep the exact same number of lines
 - keep every line's indentation, whitespace, punctuation and operators exactly as-is
 - copy every line that starts with // EXPECT completely unchanged
