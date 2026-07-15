@@ -571,6 +571,8 @@ static void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Viola
 }
 
 // §8.4 부착 법칙 — 비기호형 토큰과 괄호의 간격 (@마스크, 같은 행).
+// 여는 괄호는 앞의 피연산 표현을 피연산자로 갖는 단방향 기호형 토큰이다(§4.2 여는 괄호의
+// 신분) — 아래 규칙들은 전부 그 신분의 귀결이라 키워드·이름·닫는 괄호를 가리지 않는 일반형이다.
 // 단어 다음 여는괄호 ((·[·{) 사이의 공백 = 위반.
 // 닫는괄호 ())·]·}) 다음에 단어가 무공백으로 붙으면 = 위반.
 // 인접한 두 단어 사이 공백은 정확히 한 칸(v2.2.0).
@@ -680,33 +682,115 @@ static auto First_significant_col(std::string const &mask_row)->int{
 	return p < n ? p : -1;
 }
 
-// §9.3 개행의 발생원 — 발생원 목록 밖의 개행. 닫는 ')' + 단어 다음 행 형태만 (@마스크).
-// row 의 마지막 의미 토큰이 ')' 이고 *다음 행*(공행 건너지 않음) 첫 의미 토큰이 단어면 위반.
-// 그 외 형태(단어 + 단어, 단어 + 여는괄호, '}' + 단어, 공행으로 분리된 두 토큰,
-//   가상괄호 발현 자리 등)는 §5.5 변수선언/using/return 등의 다중행 합법 발현과
-//   공행으로 단락이 갈린 정상 케이스를 가르려면 의미 해석이 필요해 sak 보수 영역 밖이다.
-static void Check_word_paren_newline(
-	Lines const &mask, int const row, std::vector<Violation> &out
-){
-	int const n_rows = static_cast<int>(mask.size());
+static auto Has_code(std::string const &mask_row)->bool;
 
-	if(row + 1 >= n_rows){
-		return;
+// 순수 공행만 건너 다음 코드 행을 찾는다(공행 판정은 raw 행, 코드 판정은 마스크/컷마스크).
+// 공행은 개행의 발생원이 아니라 인가된 자리에 쌓인 형상(§9.4)이므로, 개행 자리 검사는 공행을
+// 투명하게 횡단해야 한다. 공행이 아닌 무코드 행(주석·전처리·문자열 전용)을 만나면 -1 —
+// 그 행들은 §2 제외 대상으로 그 자체가 발생원이라 보수적으로 포기한다.
+static auto Next_code_row_over_blanks(
+	Lines const &lines, Lines const &mask, int const from, bool &crossed_blank
+)->int{
+	int const rows = static_cast<int>(mask.size());
+
+	crossed_blank = false;
+
+	for(int r = from + 1; r < rows; ++r){
+		if( ::Is_blank_row(lines[r]) ){
+			crossed_blank = true;
+
+			continue;
+		}
+
+		if( !::Has_code(mask[r]) ){
+			return -1;
+		}
+
+		return r;
 	}
 
+	return -1;
+}
+
+// §9.3 개행의 발생원 — 닫는 ')' 뒤의 개행이 단어로 이어지는 형태 (@마스크).
+// row 의 마지막 의미 토큰이 ')' 이고 다음 코드 행의 첫 의미 토큰이 단어면 위반. 그 사이의
+// 순수 공행은 발생원이 아니므로(§9.4) 건너서 본다 — 공행을 끼워도 무허가 개행은 합법이 되지
+// 않는다. 그 외 형태(단어 + 단어 등)는 Check_unmarked_wrap 이 본다. 주석·전처리 행이 사이에
+// 끼면 §2 제외 대상(그 자체가 발생원)이라 보수적으로 침묵한다.
+static void Check_word_paren_newline(
+	Lines const &lines, Lines const &mask, int const row, std::vector<Violation> &out
+){
 	int const l = ::Last_significant_col(mask[row]);
 
 	if(l < 0 || mask[row][l] != ')'){
 		return;
 	}
 
-	int const nc = ::First_significant_col(mask[row + 1]);
+	bool crossed = false;
+	int const nr = ::Next_code_row_over_blanks(lines, mask, row, crossed);
 
-	if( nc < 0 || !::is_word_char(mask[row + 1][nc]) ){
+	if(nr < 0){
 		return;
 	}
 
-	out.push_back({ row + 1, nc, "9.3", "newline between closing ')' and word" });
+	int const nc = ::First_significant_col(mask[nr]);
+
+	if( nc < 0 || !::is_word_char(mask[nr][nc]) ){
+		return;
+	}
+
+	out.push_back(
+		{
+			nr, nc, "9.3",
+			crossed
+			? "newline between closing ')' and word — blank lines do not license it"
+			: "newline between closing ')' and word"
+		}
+	);
+}
+
+// §9.3 개행의 발생원 — 행머리의 이어감 토큰 (@마스크).
+// `else`·`catch`, 그리고 do 블록의 꼬리 `while` 은 문장을 잇는 토큰이라 그 앞에 문장 경계가
+// 없다 — 숨은 세미콜론(§4.3)이 문법 조건에서 기각되는 자리이므로, 그 앞의 개행은 발생원이
+// 없어 위반이다. 행머리 판정만으로 충분하다: 이 토큰들이 행을 시작하는 순간이 곧 위반이고,
+// `}` 와의 사이에 공행이 끼어도(공행은 발생원이 아니다, §9.4) 같은 판정이 그대로 잡으며,
+// do 앵커 확인은 Prev_significant 가 공행을 건너 준다.
+static void Check_continuation_head(
+	Lines const &mask, int const row, std::vector<Violation> &out
+){
+	int const c = ::First_significant_col(mask[row]);
+
+	if( c < 0 || !::Word_starts_at(mask[row], c) ){
+		return;
+	}
+
+	for(int i = 0; i < c; ++i){
+		if(mask[row][i] == '@'){ // 행머리에 주석·리터럴 꼬리가 있으면 §2 인접 — 보수적 침묵
+			return;
+		}
+	}
+
+	std::string const w = ::Word_at(mask[row], c);
+
+	if(w == "else" || w == "catch"){
+		out.push_back(
+			{
+				row, c, "9.3",
+				"newline before '" + w + "': it must continue on its block's '}' line"
+			}
+		);
+
+		return;
+	}
+
+	if( w == "while" && ::Is_do_tail(mask, row, c) ){
+		out.push_back(
+			{
+				row, c, "9.3",
+				"newline before do-while 'while': it must continue on the do block's '}' line"
+			}
+		);
+	}
 }
 
 // 선두 탭 개수 = 들여쓰기 깊이.
@@ -850,9 +934,11 @@ static auto Has_code(std::string const &mask_row)->bool{
 	return false;
 }
 
-// §9.4 공행 기본 유효성. (§9.2 종속의 강제 공행은 범주 4 → 검사 외.)
-// 공행(일반문자 없는 행 = 빈 행 또는 백문자만 있는 행, v2.10)은: 파일 경계가 아니어야
-// 하고, 위·아래 인접 행도 공행이 아니어야 한다.
+// §9.4 공행의 형상 유효성. (§9.2 종속의 강제 공행은 범주 4 → 검사 외.)
+// 공행은 개행의 발생원이 아니라 인가된 자리에 쌓인 형상이다(§9.4) — 자리의 적법성은 각 개행
+// 검사(Check_word_paren_newline·Check_unmarked_wrap·Check_continuation_head)가 공행을
+// 횡단하며 본다. 여기서는 형상만 본다: 공행은 파일 경계가 아니어야 하고, 위·아래 인접 행도
+// 공행이 아니어야 한다.
 // 들여쓰기 비교는 인접 행이 "코드 토큰을 포함하는 행"일 때만 의미가 있다.
 // 인접 행이 전처리 본문(§2 제외 — `\` 연장 행 포함)·주석 only·문자열 only 면
 // 그 행의 raw 들여쓰기는 spec 상 들여쓰기가 아니므로 비교 대상에서 뺀다.
@@ -1901,7 +1987,8 @@ static auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
 	std::string const w = m_o.substr(s + 1, q - s);
 
 	if(w == "struct" || w == "class" || w == "union" || w == "enum"){
-		return true;
+		// `new struct S{ 1 }` 는 정의가 아니라 상술형 타입 지정 + 중괄호 초기화다 — 제외.
+		return ::Word_before(mask, p.o_row, s + 1) != "new";
 	}
 
 	int q2 = s;
@@ -1922,7 +2009,11 @@ static auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
 
 	std::string const w2 = m_o.substr(s2 + 1, q2 - s2);
 
-	return w2 == "struct" || w2 == "class" || w2 == "union" || w2 == "enum";
+	if(w2 == "struct" || w2 == "class" || w2 == "union" || w2 == "enum"){
+		return ::Word_before(mask, p.o_row, s2 + 1) != "new";
+	}
+
+	return false;
 }
 
 // §5.5 인라인 타입 정의 가상괄호 — `struct{…}『var…』;` 패턴.
@@ -1979,7 +2070,19 @@ static void Check_anchor_inline_type(
 			++first;
 		}
 
-		if( first >= n_n || !::is_word_char(m_n[first]) ){
+		if(first >= n_n){
+			continue;
+		}
+
+		// 선언자 머리 — 식별자뿐 아니라 `*`(포인터)·`&`(참조)·`(`(매몰 선언자, §5.5)도 온다.
+		char const head = m_n[first];
+
+		bool const  
+			decl_head
+			= ::is_word_char(head) || head == '*' || head == '&' || head == '('
+		;
+
+		if(!decl_head){
 			continue;
 		}
 
@@ -3608,7 +3711,7 @@ enum class Prio{
 	assign, ternary, lor, land, bor, bxor, band,
 	eq, rel, spaceship, shift, add, mul,
 	bracket,
-	mem_ptr, mem, str_adj, scope,
+	mem_ptr, mem, str_adj, scope, // str_adj = 인접 문자열 리터럴 사이의 자리(§9.1·§6.1 ◆)
 	none,
 };
 
@@ -4897,14 +5000,18 @@ static void Check_qualifier_prefix(
 
 // §5.5 · §9.3 — 마커 없이 단어에서 단어로 넘어가는 개행.
 //
-// 행이 단어로 끝나고 다음 행이 단어로 시작하는 자리는, 그 사이에 가상 괄호가 열릴 때만 적법하다.
-// 그런데 가상 괄호가 열리는 자리는 모두 눈에 보인다 — `return`·`throw`·`using`·`case` 는
-// 키워드고, 후행반환은 `->`, 인라인 타입은 `}`, 그리고 **변수 선언문은 2칸 마커**(§5.5, v2.2.0
-// 부터 의무)다. 그러므로 키워드도 마커도 없는 단어↔단어 개행은 **어느 해석으로도 위반**이다 —
-// 변수 선언이면 마커를 빠뜨린 것(§5.5)이고, 아니면 인접한 두 비기호형 토큰 사이에 개행을 둔
-// 것(§9.3 — 발생원 목록 밖의 개행)이다. 어느 쪽이든 위반이므로 위양성 없이 확정할 수 있다.
+// 행이 단어로 끝나고 다음 코드 행이 단어로 시작하는 자리는, 그 사이에 가상 괄호가 열릴 때만
+// 적법하다. 그런데 가상 괄호가 열리는 자리는 모두 눈에 보인다 — `return`·`throw`·`using`·`case`
+// 는 키워드고, 후행반환은 `->`, 인라인 타입은 `}`, 그리고 **변수 선언문은 2칸 마커**(§5.5,
+// v2.2.0 부터 의무)다. 그러므로 키워드도 마커도 없는 단어↔단어 개행은 **어느 해석으로도
+// 위반**이다 — 변수 선언이면 마커를 빠뜨린 것(§5.5)이고, 아니면 인접한 두 비기호형 토큰 사이에
+// 개행을 둔 것(§9.3 — 발생원 목록 밖의 개행)이다. 어느 쪽이든 위반이므로 위양성 없이 확정한다.
+// 두 행 사이의 순수 공행은 건너서 본다 — 공행은 발생원이 아니라 인가된 자리에 쌓인 형상(§9.4)
+// 이므로, 공행을 끼워도 무허가 개행은 합법이 되지 않는다. 공행 판정은 raw 행으로 한다(컷마스크
+// 에서는 주석 전용 행이 잘려 공백행처럼 보이기 때문).
 static void Check_unmarked_wrap(
-	Lines const &cut_lines, Lines const &cut_mask, std::vector<Violation> &out
+	Lines const &lines, Lines const &cut_lines, Lines const &cut_mask,
+	std::vector<Violation> &out
 ){
 	static char const * const  
 		Openers[]
@@ -4913,13 +5020,21 @@ static void Check_unmarked_wrap(
 
 	int const rows = static_cast<int>(cut_mask.size());
 
-	for(int r = 0; r + 1 < rows; ++r){
+	for(int r = 0; r < rows; ++r){
 		std::string const &a = cut_mask[r];
-		std::string const &b = cut_mask[r + 1];
 
-		if( !::Has_code(a) || !::Has_code(b) ){
+		if( !::Has_code(a) ){
 			continue;
 		}
+
+		bool crossed = false;
+		int const nr = ::Next_code_row_over_blanks(lines, cut_mask, r, crossed);
+
+		if(nr < 0){
+			continue;
+		}
+
+		std::string const &b = cut_mask[nr];
 
 		int const  
 			a_end = ::Last_significant_col(a),
@@ -4975,8 +5090,11 @@ static void Check_unmarked_wrap(
 		out.push_back(
 			{
 				r, a_end, "5.5",
-				"word wraps to word without the two-space marker: a variable declaration is"
-				" missing its marker (5.5), or two adjacent tokens are split by a newline (9.3)"
+				std::string(
+					"word wraps to word without the two-space marker: a variable declaration is"
+					" missing its marker (5.5), or two adjacent tokens are split by a newline (9.3)"
+				)
+				+ (crossed ? " — blank lines do not license the split" : "")
 			}
 		);
 	}
@@ -5108,6 +5226,282 @@ static void Check_glued_declarator(
 				" one level deeper, and the closing ';' on its own line"
 			}
 		);
+	}
+}
+
+// 감싸는 `{` 쌍이 문장·선언의 스코프(함수·제어문·람다 본체, namespace, 클래스 본체, extern
+// 링키지 블록)인지 — 그 안의 행들은 괄호의 이음줄이 아니라 문장들이라, 인접 문자열 리터럴의
+// 개행을 면허하는 "다중행 괄호 안"이 아니다. 판정이 서지 않는 여는 자리(중괄호 초기화 `Foo{`,
+// `]`·`>` 뒤 등)는 false 로 두어 보수적으로 면허한다(위양성 0 우선 — 거짓 음성 수용).
+static auto Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bool{
+	int r = p.o_row, c = p.o_col - 1;
+
+	if( !::Prev_significant(mask, r, c) ){
+		return true; // 파일 첫머리의 나체 블록
+	}
+
+	char const ch = mask[r][c];
+
+	if(ch == ')'){
+		return true; // 함수·제어문·람다 본체
+	}
+
+	if( !::is_word_char(ch) ){
+		return false; // `=`·`,`·`(`·`>`·`:`·`]` 등 — 초기화·표현식 문맥으로 보수 분류
+	}
+
+	int s = c;
+
+	while( s >= 0 && ::is_word_char(mask[r][s]) ){
+		--s;
+	}
+
+	std::string const w = mask[r].substr(s + 1, c - s);
+
+	bool const  
+		scope_kw
+		= w == "do" || w == "else" || w == "try" || w == "namespace" || w == "extern"
+		|| w == "struct" || w == "class" || w == "union" || w == "enum"
+	;
+
+	if(scope_kw){
+		return true;
+	}
+
+	std::string const before = ::Word_before(mask, r, s + 1);
+
+	return
+		before == "struct" || before == "class" || before == "union" || before == "enum"
+		|| before == "namespace"
+	;
+}
+
+// §9.1 인접 문자열 리터럴 — 두 리터럴 사이의 개행은 다중행 괄호 안에서만 허용된다.
+// 토큰 스트림에서 연속한 두 일반 문자열 리터럴이 정확히 한 행 차이로 이어질 때, 이 자리를
+// 엄격히 포함하는 표현 괄호(`(`·`[`·`[[`·꺾쇠·초기화류 `{`)가 하나도 없으면 위반. 문장 스코프의
+// `{`(Brace_opens_statement_scope)는 면허가 아니다. 가상 괄호(『)는 pairs 에 없으므로, 문장
+// 머리까지 거슬러 올라 그 흔적 — 여는 키워드(return 등)·변수 선언문의 2칸 마커 — 이 보이면
+// 보수적으로 침묵한다. 원시 문자열·문자 리터럴·사이에 주석·공행이 낀 자리도 침묵(sak_coverage).
+// 접합 자리의 우선순위는 Prio::str_adj(§6.1 ◆) — §9.2 경쟁 통합은 커버리지 밖.
+static void Check_string_splice_newline(
+	Lines const &mask, Lines const &cut_lines, Seg_lines const &segs,
+	std::vector<Adj_tok> const &toks, std::vector<Bk_pair> const &pairs,
+	std::vector<Angle_pair> const &angles, std::vector<Violation> &out
+){
+	auto const  
+		is_plain_string
+		= [&segs](int const row, int const col)->bool{
+			if( row >= static_cast<int>(segs.size()) ){
+				return false;
+			}
+
+			for(Segment const &s : segs[row]){
+				if(s.col == col){
+					return s.kind == Seg_kind::string_lit;
+				}
+			}
+
+			return false;
+		}
+	;
+
+	auto const  
+		has_comment
+		= [&segs](int const row, int const col, bool const after)->bool{
+			if( row >= static_cast<int>(segs.size()) ){
+				return false;
+			}
+
+			for(Segment const &s : segs[row]){
+				if( s.kind == Seg_kind::comment && (after ? s.col > col : s.col < col) ){
+					return true;
+				}
+			}
+
+			return false;
+		}
+	;
+
+	auto const  
+		has_marker_tail
+		= [&cut_lines](int const row)->bool{
+			if( row < 0 || row >= static_cast<int>(cut_lines.size()) ){
+				return false;
+			}
+
+			std::string const &raw = cut_lines[row];
+			int tail = 0;
+
+			for( int k = static_cast<int>(raw.size()) - 1; k >= 0 && raw[k] == ' '; --k ){
+				++tail;
+			}
+
+			return tail == 2;
+		}
+	;
+
+	int const n = static_cast<int>(toks.size());
+
+	for(int i = 0; i + 1 < n; ++i){
+		Adj_tok const &a = toks[i];
+		Adj_tok const &b = toks[i + 1];
+
+		bool const  
+			splice
+			= a.cls == Adj_cls::lit && b.cls == Adj_cls::lit && b.row == a.row + 1
+			&& is_plain_string(a.row, a.col) && is_plain_string(b.row, b.col)
+			&& !has_comment(a.row, a.col, true) && !has_comment(b.row, b.col, false)
+		;
+
+		if(!splice){
+			continue;
+		}
+
+		bool licensed = false;
+
+		for(Bk_pair const &p : pairs){
+			bool const  
+				contains
+				= ( p.o_row < a.row || (p.o_row == a.row && p.o_col < a.col) )
+				&& ( p.c_row > b.row || (p.c_row == b.row && p.c_col > b.col + b.len - 1) )
+			;
+
+			if(  contains && ( p.kind != '{' || !::Brace_opens_statement_scope(mask, p) )  ){
+				licensed = true;
+
+				break;
+			}
+		}
+
+		for(Angle_pair const &g : angles){
+			if(licensed){
+				break;
+			}
+
+			bool const  
+				contains
+				= ( g.o_row < a.row || (g.o_row == a.row && g.o_col < a.col) )
+				&& ( g.c_row > b.row || (g.c_row == b.row && g.c_col > b.col + b.len - 1) )
+			;
+
+			if(contains){
+				licensed = true;
+			}
+		}
+
+		if(licensed){
+			continue;
+		}
+
+		// 문장 머리까지 거슬러 가상 괄호의 흔적을 찾는다 — 있으면 침묵(『 는 pairs 밖이다).
+		bool virtual_trace = false;
+		int stmt_lo = a.row;
+
+		for(int j = i - 1; j >= 0 && i - j < 400; --j){
+			Adj_tok const &t = toks[j];
+
+			bool const  
+				boundary
+				= t.cls == Adj_cls::semi
+				|| (
+					(t.cls == Adj_cls::open_b || t.cls == Adj_cls::close_b)
+					&& (t.text == "{" || t.text == "}")
+				)
+			;
+
+			if(boundary){
+				break;
+			}
+
+			stmt_lo = t.row;
+
+			bool const  
+				opener
+				= t.cls == Adj_cls::word
+				&& (
+					t.text == "return" || t.text == "throw" || t.text == "using"
+					|| t.text == "case" || t.text == "co_return" || t.text == "co_yield"
+				)
+			;
+
+			if(opener){
+				virtual_trace = true;
+
+				break;
+			}
+		}
+
+		for(int r = stmt_lo; !virtual_trace && r <= a.row; ++r){
+			virtual_trace = has_marker_tail(r);
+		}
+
+		if(virtual_trace){
+			continue;
+		}
+
+		out.push_back(
+			{
+				b.row, b.col, "9.1",
+				"adjacent string literals: the newline between them is allowed only"
+				" inside a multi-line bracket — wrap them in parentheses"
+			}
+		);
+	}
+}
+
+// §9.3 — `}` 로 끝난 행 다음 코드 행이 `(`·`[` 로 시작하는 자리. IIFE 의 호출 괄호가 절단된
+// 것이면 위반(부착 자리 — §4.3 틈 조건)이고, 괄호문(`(*fp)();`)·람다문 같은 새 문장의 머리면
+// 적법하다. 렉서 수준에서는 갈리지 않아 용의로만 지목한다(속성 `[[` 는 제외 — 적법한 머리).
+static void Check_brace_paren_newline(
+	Lines const &lines, Lines const &mask, std::vector<Violation> &out
+){
+	int const rows = static_cast<int>(mask.size());
+
+	for(int r = 0; r < rows; ++r){
+		int const l = ::Last_significant_col(mask[r]);
+
+		if(l < 0 || mask[r][l] != '}'){
+			continue;
+		}
+
+		bool crossed = false;
+		int const nr = ::Next_code_row_over_blanks(lines, mask, r, crossed);
+
+		if(nr < 0){
+			continue;
+		}
+
+		int const nc = ::First_significant_col(mask[nr]);
+
+		if(nc < 0){
+			continue;
+		}
+
+		char const ch = mask[nr][nc];
+
+		bool const  
+			cand
+			= ch == '('
+			|| (
+				ch == '['
+				&& ( nc + 1 >= static_cast<int>(mask[nr].size()) || mask[nr][nc + 1] != '[' )
+			)
+		;
+
+		if(!cand){
+			continue;
+		}
+
+		Violation  
+			v{
+				nr, nc, "9.3",
+				std::string("newline between '}' and '") + ch
+				+ "': a call attachment (IIFE) or a new statement? notation cannot settle this"
+			}
+		;
+
+		v.cat = V_cat::suspect;
+		out.push_back(v);
 	}
 }
 
@@ -5281,7 +5675,8 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		::Check_inner_space(mask[row], row, out);
 		::Check_ctrl_brace(mask, row, out);
 		::Check_word_paren_space(mask[row], row, out);
-		::Check_word_paren_newline(mask, row, out);
+		::Check_word_paren_newline(lines, mask, row, out);
+		::Check_continuation_head(mask, row, out);
 		::Check_blank_line(lines, mask, row, out);
 		::Check_token_space(mask[row], row, out);
 		::Check_keyword_position(mask[row], row, out);
@@ -5299,8 +5694,10 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	::Check_operator_blank_line(lines, mask, toks, pairs, pass2);
 	::Check_unary_pair(toks, pass2);
 	::Check_qualifier_prefix(toks, pass2);
-	::Check_unmarked_wrap(cut_lines, cut_mask, pass2);
+	::Check_unmarked_wrap(lines, cut_lines, cut_mask, pass2);
 	::Check_glued_declarator(cut_lines, toks, pairs, angles, pass2);
+	::Check_string_splice_newline(mask, cut_lines, segs, toks, pairs, angles, pass2);
+	::Check_brace_paren_newline(lines, mask, pass2);
 	::Check_suspects(toks, pass2);
 
 	std::vector<char> gated(rows, 0);
