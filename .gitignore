@@ -3,3 +3,6 @@
 
 \[*\]_*.*
 \[*\]_*.d/
+
+# locally generated battery variants (Miss Yeon's output) — never committed
+test/battery/gen/
