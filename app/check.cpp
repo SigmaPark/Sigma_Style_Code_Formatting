@@ -1019,14 +1019,10 @@ static void Check_blank_line(
 
 	int const last = static_cast<int>(lines.size()) - 1;
 
+	// 파일 경계 — 첫 행 공행, 그리고 EOF 에 인접한 꼬리 공행(파일 끝 개행 하나 너머의 여분)은 위반.
+	// 그 밖의 자리에서 공행이 연속하는 것은 §9.4 신판에서 허용한다(4연속·연속 금지 조항 폐지).
 	if(row == 0 || row == last){
 		out.push_back({ row, 0, "9.4", "blank line at file boundary" });
-
-		return;
-	}
-
-	if( ::Is_blank_row(lines[row - 1]) || ::Is_blank_row(lines[row + 1]) ){
-		out.push_back({ row, 0, "9.4", "consecutive blank lines" });
 
 		return;
 	}
