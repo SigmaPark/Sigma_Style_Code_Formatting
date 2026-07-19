@@ -3544,30 +3544,21 @@ static void Check_angle_close_last(
 	}
 }
 
-// §5.5 P5 — 다중행 타입의 변수 선언은 가상 괄호를 전개해야 한다. 다중행 `<...>` 의 닫는 행이
-// `>::식별자(::식별자)* <공백> 식별자 (;|,|=)` 꼴(선언자를 타입 닫는 행에 붙인 약식)이면 위반.
-// 좁게 — `>` 뒤가 `::` 로 이어지는 타입 사슬이고, 그 뒤에 공백을 사이에 둔 선언자 단어와 종결이
-// 오는 자리만 본다. 그 밖(호출 `(`·부착 `{`·표현식 `==` 등)은 침묵(위양성 0).
-static void Check_declarator_expansion(
-	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
-){
-	if(p.o_row == p.c_row){
-		return;
-	}
-
-	std::string const &m = mask[p.c_row];
+// 다중행 꺾쇠의 닫는 `>` 뒤로 이어지는 `::식별자(::식별자)*` 타입 사슬의 끝(마지막 식별자
+// 바로 뒤) 열을 돌려준다. 사슬 꼴이 아니면 -1.
+static auto Angle_chain_end(std::string const &m, int const from)->int{
 	int const n = static_cast<int>(m.size());
-	int i = p.c_col + 1;
+	int i = from;
 
 	if(i + 1 >= n || m[i] != ':' || m[i + 1] != ':'){
-		return;
+		return -1;
 	}
 
 	while(i + 1 < n && m[i] == ':' && m[i + 1] == ':'){
 		i += 2;
 
 		if( i >= n || !::is_word_char(m[i]) ){
-			return;
+			return -1;
 		}
 
 		while( i < n && ::is_word_char(m[i]) ){
@@ -3575,15 +3566,37 @@ static void Check_declarator_expansion(
 		}
 	}
 
-	int ws = 0;
+	return i;
+}
+
+// P5 약식 꼬리 — 타입이 끝난 지점 뒤가 `<공백> 식별자 (;|,|=)` 꼴(선언자를 타입 닫는 행에
+// 붙인 약식)인지 본다. 그 밖(호출 `(`·부착 `{`·표현식 `==` 등)은 거짓(위양성 0).
+// decor_head 는 식별자 앞의 데코레이터 `*`·`&` 허용 여부 — 인라인 타입의 `}` 는 피연산자가
+// 될 수 없어 곱셈·비트 AND 와 모호하지 않으므로 중괄호 쪽만 허용한다(꺾쇠 사슬 끝은 값일 수
+// 있어 불허).
+static auto Glued_declarator_tail(
+	std::string const &m, int const from, bool const decor_head
+)->bool{
+	int const n = static_cast<int>(m.size());
+	int i = from, ws = 0;
 
 	while( i < n && (m[i] == ' ' || m[i] == '\t') ){
 		++i;
 		++ws;
 	}
 
-	if( ws == 0 || i >= n || !::is_word_char(m[i]) ){
-		return;
+	if(ws == 0){
+		return false;
+	}
+
+	if(decor_head){
+		while( i < n && (m[i] == '*' || m[i] == '&') ){
+			++i;
+		}
+	}
+
+	if( i >= n || !::is_word_char(m[i]) ){
+		return false;
 	}
 
 	while( i < n && ::is_word_char(m[i]) ){
@@ -3594,10 +3607,48 @@ static void Check_declarator_expansion(
 		++i;
 	}
 
-	if( i < n && (m[i] == ';' || m[i] == ',' || m[i] == '=') ){
+	return i < n && (m[i] == ';' || m[i] == ',' || m[i] == '=');
+}
+
+// §5.5 P5 — 다중행 타입의 변수 선언은 가상 괄호를 전개해야 한다. 다중행 `<...>` 의 닫는 행이
+// `>::사슬 <공백> 식별자 (;|,|=)` 꼴이면 위반. 좁게 — 사슬과 약식 꼬리가 정확히 맞는 자리만
+// 본다(위양성 0).
+static void Check_declarator_expansion(
+	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
+){
+	if(p.o_row == p.c_row){
+		return;
+	}
+
+	int const i = ::Angle_chain_end(mask[p.c_row], p.c_col + 1);
+
+	if( i >= 0 && ::Glued_declarator_tail(mask[p.c_row], i, false) ){
 		out.push_back(
 			{ p.c_row, p.c_col, "5.5", "multi-line declaration must expand its virtual bracket" }
 		);
+	}
+}
+
+// §5.5 P5 — 인라인 타입 정의도 동일하다. 다중행 `{...}` 로 타입을 정의한 변수 선언문의 닫는
+// 행이 `} <공백> 식별자 (;|,|=)` 꼴이면 위반. 선언자가 하나든 여럿이든 같다.
+static void Check_declarator_expansion_brace(
+	Lines const &mask, std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
+){
+	for(Bk_pair const &p : pairs){
+		bool const  
+			target
+			= p.o_row != p.c_row && ::Is_inline_type_close(mask, p)
+			&& ::Glued_declarator_tail(mask[p.c_row], p.c_col + p.c_len, true)
+		;
+
+		if(target){
+			out.push_back(
+				{
+					p.c_row, p.c_col, "5.5",
+					"multi-line declaration must expand its virtual bracket"
+				}
+			);
+		}
 	}
 }
 
@@ -4768,6 +4819,49 @@ struct Shield{
 	int row, lo, hi;
 };
 
+// 다중행 타입의 닫는 행에서, 타입이 끝난 지점(from) 뒤가 단일행 변수 선언 가상 괄호(선언자
+// 나열 + 같은 행의 종결 `;`)이면 그 `;` 의 열을 돌려준다. 아니면 -1. 선언자 머리는 식별자와
+// `*`·`&`·`(` 만 인정하고, `;` 는 괄호 깊이 0 에서 찾는다.
+static auto Var_decl_close_semi(std::string const &m, int const from)->int{
+	int const n = static_cast<int>(m.size());
+	int i = from, ws = 0;
+
+	while( i < n && (m[i] == ' ' || m[i] == '\t') ){
+		++i;
+		++ws;
+	}
+
+	bool const  
+		head
+		= ws != 0 && i < n
+		&& ( ::is_word_char(m[i]) || m[i] == '*' || m[i] == '&' || m[i] == '(' )
+	;
+
+	if(!head){
+		return -1;
+	}
+
+	for(int depth = 0; i < n; ++i){
+		char const c = m[i];
+
+		if(c == '(' || c == '[' || c == '{'){
+			++depth;
+		}
+		else if(c == ')' || c == ']' || c == '}'){
+			if(depth == 0){
+				return -1;
+			}
+
+			--depth;
+		}
+		else if(c == ';' && depth == 0){
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 // §9.2 — 개행 경쟁 범위.
 //
 // 다중행 상태의 기호형 토큰·괄호는, 자기 경쟁 범위 안에 **자기보다 개행 우선순위가 높은 단일행
@@ -4775,10 +4869,12 @@ struct Shield{
 // 다음 행, 다중행 괄호면 여는 행과 닫는 행, 세미콜론이면 자기 행뿐이다.
 //
 // 단일행 괄호 안은 통째로 하나의 피연산 토큰이라(§6.2) 경쟁에 노출되지 않는다 — 생성자
-// 멤버초기화 리스트·상속 리스트처럼 단일행 가상 괄호를 이루는 자리도 마찬가지다(§5.5).
+// 멤버초기화 리스트·상속 리스트·변수 선언문처럼 단일행 가상 괄호를 이루는 자리도
+// 마찬가지다(§5.5).
 static void Check_break_competition(
-	std::vector<Adj_tok> const &toks, std::vector<Bk_pair> const &pairs,
-	std::vector<Angle_pair> const &angles, std::vector<Violation> &out
+	Lines const &mask, std::vector<Adj_tok> const &toks,
+	std::vector<Bk_pair> const &pairs, std::vector<Angle_pair> const &angles,
+	std::vector<Violation> &out
 ){
 	int const n = static_cast<int>(toks.size());
 
@@ -4797,6 +4893,39 @@ static void Check_break_competition(
 	for(Angle_pair const &a : angles){
 		if(a.o_row == a.c_row){
 			shields.push_back({ a.o_row, a.o_col, a.c_col });
+		}
+	}
+
+	// 변수 선언문의 단일행 가상 괄호 — 다중행 타입(인라인 타입 정의)이 끝난 `}` 뒤부터 같은
+	// 행의 종결 `;` 까지가 하나의 피연산 토큰이다. 안의 구분자·초기화자는 경쟁에 노출되지
+	// 않는다.
+	for(Bk_pair const &p : pairs){
+		if( p.o_row != p.c_row && ::Is_inline_type_close(mask, p) ){
+			int const semi = ::Var_decl_close_semi(mask[p.c_row], p.c_col + p.c_len);
+
+			if(semi >= 0){
+				shields.push_back({ p.c_row, p.c_col, semi });
+			}
+		}
+	}
+
+	// 다중행 꺾쇠 타입(`>::사슬`)의 변수 선언문도 동일하다 — 사슬이 끝난 지점 뒤부터 종결
+	// `;` 까지가 단일행 가상 괄호다.
+	for(Angle_pair const &a : angles){
+		if(a.o_row == a.c_row){
+			continue;
+		}
+
+		int const chain = ::Angle_chain_end(mask[a.c_row], a.c_col + 1);
+
+		if(chain < 0){
+			continue;
+		}
+
+		int const semi = ::Var_decl_close_semi(mask[a.c_row], chain);
+
+		if(semi >= 0){
+			shields.push_back({ a.c_row, a.c_col, semi });
 		}
 	}
 
@@ -5865,6 +5994,7 @@ auto check_lines(
 	::Check_anchor_keyword_semicolon(lines, mask, out);
 	::Check_anchor_trailing_return(lines, mask, out);
 	::Check_anchor_inline_type(cut_lines, cut_mask, pairs, out);
+	::Check_declarator_expansion_brace(mask, pairs, out);
 	::Check_anchor_case(lines, mask, out);
 	::Check_anchor_colon_vbracket(lines, mask, out);
 	::Check_anchor_var_decl_marker(cut_lines, cut_mask, out);
@@ -5913,7 +6043,7 @@ auto check_lines(
 	std::vector<Violation> pass2;
 	::Check_adjudicated_space(toks, pass2);
 	::Check_break_form(toks, pass2);
-	::Check_break_competition(toks, pairs, angles, pass2);
+	::Check_break_competition(mask, toks, pairs, angles, pass2);
 	::Check_operator_blank_line(lines, mask, toks, pairs, pass2);
 	::Check_unary_pair(toks, pass2);
 	::Check_qualifier_prefix(toks, pass2);
