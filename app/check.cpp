@@ -1616,6 +1616,53 @@ static void Check_multiline_bracket(
 // §5.6 숨은 중괄호 — case/default/접근지정자(public/private/protected) 라인은
 // 그 라인을 *직접 둘러싼 가장 안쪽 `{ }` brace* 와 같은 들여쓰기여야 한다.
 // 외곽 함수 본체나 namespace 본체와의 들여쓰기는 비교 대상이 아니다.
+// 행 r 이 숨은 중괄호의 라벨 행인가 — `case`/`default`, 또는 `:` 를 뒤에 둔 접근 지정자.
+// 라벨 행이면 그 첫 의미 열을 head_col 에 채우고 true. (§5.6 리듬·닫힘 판정에 공유.)
+static auto Label_row(Lines const &mask, int const r, int &head_col)->bool{
+	if( r < 0 || r >= static_cast<int>(mask.size()) || !::Has_code(mask[r]) ){
+		return false;
+	}
+
+	std::string const &m = mask[r];
+	int first = 0;
+	int const m_n = static_cast<int>(m.size());
+
+	while( first < m_n && (m[first] == ' ' || m[first] == '\t' || m[first] == '@') ){
+		++first;
+	}
+
+	if(first >= m_n){
+		return false;
+	}
+
+	std::string const head = ::Word_at(m, first);
+
+	bool const is_case_or_default = head == "case" || head == "default";
+	bool const is_access = head == "public" || head == "private" || head == "protected";
+
+	if(!is_case_or_default && !is_access){
+		return false;
+	}
+
+	// 접근지시자는 `public`/`private`/`protected` 바로 뒤 (공백 skip) 가 `:` 여야 한다.
+	// 아니면 상속 리스트의 `public Base` 등 다른 문맥이라 §5.6 대상 아님.
+	if(is_access){
+		int p = first + static_cast<int>(head.size());
+
+		while( p < m_n && (m[p] == ' ' || m[p] == '\t' || m[p] == '@') ){
+			++p;
+		}
+
+		if(p >= m_n || m[p] != ':'){
+			return false;
+		}
+	}
+
+	head_col = first;
+
+	return true;
+}
+
 static void Check_hidden_brace(
 	Lines const &lines, Lines const &mask,
 	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
@@ -1623,50 +1670,8 @@ static void Check_hidden_brace(
 	int const rows = static_cast<int>(lines.size());
 
 	for(int r = 0; r < rows; ++r){
-		if( lines[r].empty() || !::Has_code(mask[r]) ){
+		if( int head_col = 0; !::Label_row(mask, r, head_col) ){
 			continue;
-		}
-
-		std::string const &m = mask[r];
-		int first = 0;
-		int const m_n = static_cast<int>(m.size());
-
-		while( first < m_n && (m[first] == ' ' || m[first] == '\t' || m[first] == '@') ){
-			++first;
-		}
-
-		if(first >= m_n){
-			continue;
-		}
-
-		std::string const head = ::Word_at(m, first);
-
-		bool const  
-			is_case_or_default
-			= head == "case" || head == "default"
-		;
-
-		bool const  
-			is_access_keyword
-			= head == "public" || head == "private" || head == "protected"
-		;
-
-		if(!is_case_or_default && !is_access_keyword){
-			continue;
-		}
-
-		// 접근지시자는 `public`/`private`/`protected` 바로 뒤 (공백 skip) 가 `:` 여야 한다.
-		// 아니면 상속 리스트의 `public Base` 등 다른 문맥이라 §5.6 대상 아님.
-		if(is_access_keyword){
-			int p = first + static_cast<int>(head.size());
-
-			while( p < m_n && (m[p] == ' ' || m[p] == '\t' || m[p] == '@') ){
-				++p;
-			}
-
-			if(p >= m_n || m[p] != ':'){
-				continue;
-			}
 		}
 
 		Bk_pair const *inner = nullptr;
@@ -5623,7 +5628,9 @@ static auto Cut_tail_comment(Lines const &src, Seg_lines const &segs)->Lines{
 	return out;
 }
 
-auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violation>{
+auto check_lines(
+	Lines const &lines, Seg_lines const &segs, bool const final_newline
+)->std::vector<Violation>{
 	std::vector<Violation> out;
 	Lines const mask = ::render_mask(lines, segs);
 	Lines const cut_lines = ::Cut_tail_comment(lines, segs);
@@ -5712,6 +5719,16 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		if(v.row >= 0 && v.row < rows && gated[v.row] == 0){
 			out.push_back(v);
 		}
+	}
+
+	// §9.4 — 파일은 개행으로 끝나야 한다(마지막 행은 공행). 개행이 아니라 비어 있지 않은 코드로
+	// 끝나면 위반. 개행을 만들 수 없으므로 edit 은 손대지 못한다([manual]).
+	if(!final_newline && rows > 0){
+		int const last = rows - 1;
+
+		out.push_back(
+			{ last, static_cast<int>(lines[last].size()), "9.4", "missing newline at end of file" }
+		);
 	}
 
 	return out;
@@ -5824,14 +5841,16 @@ static void Apply_edit_op(std::string &line, Edit_op const &op){
 	}
 }
 
-auto edit_lines(Lines const &input, int const lo, int const hi)->Edit_result{
+auto edit_lines(
+	Lines const &input, int const lo, int const hi, bool const final_newline
+)->Edit_result{
 	Lines lines = input;
 	std::vector<Edit_note> fixed_notes;
 
 	// 고정점까지 반복 — 매 패스 재검사해 자동교정 힌트(fix != none)를 모아 적용한다.
 	for(int pass = 0; pass < 8; ++pass){
 		Seg_lines const segs = ::scan_lines(lines);
-		std::vector<Violation> const viol = ::check_lines(lines, segs);
+		std::vector<Violation> const viol = ::check_lines(lines, segs, final_newline);
 
 		// 신호 공백 불가침 — 판정에 참여하는 공백의 유무를 자동교정이 뒤집어선 안 된다.
 		Lines const mask = ::render_mask(lines, segs);
@@ -5922,7 +5941,7 @@ auto edit_lines(Lines const &input, int const lo, int const hi)->Edit_result{
 
 	// 자동교정 밖에 남은 위반(범위 안)을 manual 로 기록 — 사람·AI 인계 목록.
 	Seg_lines const segs = ::scan_lines(res.lines);
-	std::vector<Violation> const remain = ::check_lines(res.lines, segs);
+	std::vector<Violation> const remain = ::check_lines(res.lines, segs, final_newline);
 
 	for(Violation const &v : remain){
 		if(v.row < lo || v.row > hi){
