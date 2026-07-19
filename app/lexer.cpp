@@ -131,7 +131,8 @@ static auto Scan_one_line(
 
 	if(mode == Mode::block_comment){
 		kind = Seg_kind::comment;
-	} else if(mode == Mode::raw_string){
+	}
+	else if(mode == Mode::raw_string){
 		kind = Seg_kind::raw_string;
 	}
 
@@ -156,13 +157,15 @@ static auto Scan_one_line(
 				seg_start = i;
 				mode = Mode::line_comment;
 				i += 2;
-			} else if(c == '/' && i + 1 < n && line[i + 1] == '*'){
+			}
+			else if(c == '/' && i + 1 < n && line[i + 1] == '*'){
 				flush(i);
 				kind = Seg_kind::comment;
 				seg_start = i;
 				mode = Mode::block_comment;
 				i += 2;
-			} else if( c == '"' && ::is_raw_prefix(line, i) ){
+			}
+			else if( c == '"' && ::is_raw_prefix(line, i) ){
 				int const pfx = ::Word_start(line, i);
 
 				flush(pfx);
@@ -182,65 +185,79 @@ static auto Scan_one_line(
 				if(i < n){
 					i += 1;
 				}
-			} else if(c == '"'){
+			}
+			else if(c == '"'){
 				flush(i);
 				kind = Seg_kind::string_lit;
 				seg_start = i;
 				mode = Mode::string_lit;
 				i += 1;
-			} else if( c == '\'' && !::is_digit_sep(line, i) ){
+			}
+			else if( c == '\'' && !::is_digit_sep(line, i) ){
 				flush(i);
 				kind = Seg_kind::char_lit;
 				seg_start = i;
 				mode = Mode::char_lit;
 				i += 1;
-			} else{
+			}
+			else{
 				i += 1;
 			}
-		} else if(mode == Mode::line_comment){
+		}
+		else if(mode == Mode::line_comment){
 			i = n;
-		} else if(mode == Mode::block_comment){
+		}
+		else if(mode == Mode::block_comment){
 			if(c == '*' && i + 1 < n && line[i + 1] == '/'){
 				i += 2;
 				flush(i);
 				kind = Seg_kind::code;
 				seg_start = i;
 				mode = Mode::normal;
-			} else{
+			}
+			else{
 				i += 1;
 			}
-		} else if(mode == Mode::raw_string){
+		}
+		else if(mode == Mode::raw_string){
 			if( ::raw_closes_at(line, i, raw_delim) ){
 				i += static_cast<int>(raw_delim.size()) + 2;
 				flush(i);
 				kind = Seg_kind::code;
 				seg_start = i;
 				mode = Mode::normal;
-			} else{
+			}
+			else{
 				i += 1;
 			}
-		} else if(mode == Mode::string_lit){
+		}
+		else if(mode == Mode::string_lit){
 			if(c == '\\' && i + 1 < n){
 				i += 2;
-			} else if(c == '"'){
+			}
+			else if(c == '"'){
 				i += 1;
 				flush(i);
 				kind = Seg_kind::code;
 				seg_start = i;
 				mode = Mode::normal;
-			} else{
+			}
+			else{
 				i += 1;
 			}
-		} else{
+		}
+		else{
 			if(c == '\\' && i + 1 < n){
 				i += 2;
-			} else if(c == '\''){
+			}
+			else if(c == '\''){
 				i += 1;
 				flush(i);
 				kind = Seg_kind::code;
 				seg_start = i;
 				mode = Mode::normal;
-			} else{
+			}
+			else{
 				i += 1;
 			}
 		}
@@ -290,7 +307,8 @@ auto render_mask(Lines const &lines, Seg_lines const &segs)->Lines{
 		for(Segment const &s : segs[row]){
 			if(s.kind == Seg_kind::code){
 				masked += line.substr(s.col, s.len);
-			} else{
+			}
+			else{
 				masked += std::string( static_cast<std::size_t>(s.len), '@' );
 			}
 		}
@@ -334,7 +352,8 @@ auto render_dump(Lines const &lines, Seg_lines const &segs)->Lines{
 		for(Segment const &s : segs[row]){
 			if(s.kind == Seg_kind::code){
 				text += line.substr(s.col, s.len);
-			} else{
+			}
+			else{
 				text += "$";
 				text += ::Kind_name(s.kind);
 				text += "[" + std::to_string(idx) + "]";

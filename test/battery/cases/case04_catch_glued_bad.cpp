@@ -1,9 +1,8 @@
 void f(){
 	try{
 		g();
-	}
-	catch(...){
+	} catch(...){
 		h();
 	}
 }
-// EXPECT 5:9.3
+// EXPECT 4:4.3

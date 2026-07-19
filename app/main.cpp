@@ -68,7 +68,8 @@ static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<st
 				out.emplace_back(it->path().generic_string());
 			}
 		}
-	} else{
+	}
+	else{
 		fs::directory_iterator const end;
 		std::error_code ec;
 
@@ -126,7 +127,8 @@ static auto Parse_line_range(std::string const &s, Line_range &out)->bool{
 				}
 
 				out_v = static_cast<std::size_t>(v);
-			} catch(...){
+			}
+			catch(...){
 				return false;
 			}
 
@@ -233,7 +235,8 @@ static auto Check_file(
 
 		if(is_suspect){
 			++suspects;
-		} else{
+		}
+		else{
 			++hits;
 		}
 	}
@@ -293,7 +296,8 @@ static auto Edit_file(std::string const &path, Line_range const range, bool cons
 
 		if(note.cat == V_cat::suspect){
 			tail = " [suspect]";
-		} else if(note.fixed){
+		}
+		else if(note.fixed){
 			tail = " (fixed)";
 		}
 
@@ -379,11 +383,14 @@ auto main(int const argc, char const * const *argv)->int{
 
 		if(a == "-r"){
 			recur = true;
-		} else if(a == "-n" || a == "--dry-run"){
+		}
+		else if(a == "-n" || a == "--dry-run"){
 			dry = true;
-		} else if(a == "--classes"){
+		}
+		else if(a == "--classes"){
 			classes = true;
-		} else if(a == "-b"){
+		}
+		else if(a == "-b"){
 			if(i + 1 >= args.size()){
 				std::cerr << "error: -b requires a range argument (e.g. 3:50, 3:, :50)\n";
 				parse_ok = false;
@@ -399,9 +406,11 @@ auto main(int const argc, char const * const *argv)->int{
 			}
 
 			has_range = true;
-		} else if(target.empty()){
+		}
+		else if(target.empty()){
 			target = a;
-		} else{
+		}
+		else{
 			std::cerr << "error: unexpected argument: " << a << "\n";
 			parse_ok = false;
 			break;
@@ -482,7 +491,8 @@ auto main(int const argc, char const * const *argv)->int{
 		for( std::string const &f : ::Collect_sources(path, recur) ){
 			if(classes){
 				::Dump_classes(f);
-			} else{
+			}
+			else{
 				total += ::Check_file(f, range, suspects);
 			}
 
