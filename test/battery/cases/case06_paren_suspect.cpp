@@ -2,4 +2,4 @@ TEST_MACRO(foo)
 static void Helper(){
 	run();
 }
-// EXPECT 2:9.3
+// EXPECT-SUSPECT 2:4.3

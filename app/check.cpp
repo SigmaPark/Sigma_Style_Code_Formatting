@@ -61,10 +61,12 @@ static auto Display_width(std::string const &line)->std::size_t{
 		if( (lead >> 5) == 0x6 ){
 			bytes = 2;
 			cp = lead & 0x1F;
-		} else if( (lead >> 4) == 0xE ){
+		}
+		else if( (lead >> 4) == 0xE ){
 			bytes = 3;
 			cp = lead & 0x0F;
-		} else if( (lead >> 3) == 0x1E ){
+		}
+		else if( (lead >> 3) == 0x1E ){
 			bytes = 4;
 			cp = lead & 0x07;
 		}
@@ -76,7 +78,8 @@ static auto Display_width(std::string const &line)->std::size_t{
 
 			if( (cont >> 6) != 0x2 ){
 				valid = false;
-			} else{
+			}
+			else{
 				cp = (cp << 6) | (cont & 0x3F);
 			}
 		}
@@ -386,7 +389,8 @@ static auto Match_paren(Lines const &mask, int const max_row, int &row, int &col
 		for( int const len = static_cast<int>(mask[row].size()); col < len; ++col ){
 			if(char const c = mask[row][col]; c == '('){
 				++depth;
-			} else if(c == ')'){
+			}
+			else if(c == ')'){
 				if(--depth == 0){
 					return true;
 				}
@@ -420,7 +424,8 @@ static auto Match_brace_back(Lines const &mask, int &row, int &col)->bool{
 		for(; col >= 0; --col){
 			if(char const ch = mask[row][col]; ch == '}'){
 				++depth;
-			} else if(ch == '{'){
+			}
+			else if(ch == '{'){
 				if(--depth == 0){
 					return true;
 				}
@@ -444,7 +449,8 @@ static auto Match_bracket_back(
 		for(; col >= 0; --col){
 			if(char const ch = mask[row][col]; ch == close){
 				++depth;
-			} else if(ch == open){
+			}
+			else if(ch == open){
 				if(--depth == 0){
 					return true;
 				}
@@ -543,7 +549,8 @@ static void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Viola
 							body_found = ::Next_code(mask, max_row, br, bc);
 						}
 					}
-				} else if(word == "do" || word == "else"){
+				}
+				else if(word == "do" || word == "else"){
 					body_found = ::Next_code(mask, max_row, br, bc);
 				}
 
@@ -683,6 +690,7 @@ static auto First_significant_col(std::string const &mask_row)->int{
 }
 
 static auto Has_code(std::string const &mask_row)->bool;
+static auto Label_row(Lines const &mask, int r, int &head_col)->bool;
 
 // 순수 공행만 건너 다음 코드 행을 찾는다(공행 판정은 raw 행, 코드 판정은 마스크/컷마스크).
 // 공행은 개행의 발생원이 아니라 인가된 자리에 쌓인 형상(§9.4)이므로, 개행 자리 검사는 공행을
@@ -712,11 +720,12 @@ static auto Next_code_row_over_blanks(
 	return -1;
 }
 
-// §9.3 개행의 발생원 — 닫는 ')' 뒤의 개행이 단어로 이어지는 형태 (@마스크).
-// row 의 마지막 의미 토큰이 ')' 이고 다음 코드 행의 첫 의미 토큰이 단어면 위반. 그 사이의
-// 순수 공행은 발생원이 아니므로(§9.4) 건너서 본다 — 공행을 끼워도 무허가 개행은 합법이 되지
-// 않는다. 그 외 형태(단어 + 단어 등)는 Check_unmarked_wrap 이 본다. 주석·전처리 행이 사이에
-// 끼면 §2 제외 대상(그 자체가 발생원)이라 보수적으로 침묵한다.
+// §4.3 닫는 ')' 뒤의 개행이 단어로 이어지는 형태 (@마스크). row 의 마지막 의미 토큰이 ')' 이고
+// 다음 코드 행의 첫 의미 토큰이 단어인 자리를 본다. 사이의 순수 공행은 발생원이 아니므로(§9.4)
+// 건너서 본다. 주석·전처리 행이 끼면 §2 인접이라 보수적으로 침묵한다.
+//   · ')' 가 다중행 괄호의 닫음이면 ")▽word" 는 가상연산자가 개행한 적법한 형상 — 침묵.
+//   · 단일행 ')' 뒤 개행 단어는 문장 매크로의 새 문장인지 응집해야 할 이어짐인지 표기만으로
+//     못 가린다 — 용의로 지목한다(확정 위반으로 단정하지 않는다).
 static void Check_word_paren_newline(
 	Lines const &lines, Lines const &mask, int const row, std::vector<Violation> &out
 ){
@@ -739,57 +748,93 @@ static void Check_word_paren_newline(
 		return;
 	}
 
+	int pr = row, pc = l;
+
+	if( ::Match_bracket_back(mask, '(', ')', pr, pc) && pr != row ){
+		return;
+	}
+
 	out.push_back(
 		{
-			nr, nc, "9.3",
+			nr, nc, "4.3",
 			crossed
-			? "newline between closing ')' and word — blank lines do not license it"
-			: "newline between closing ')' and word"
+			? "newline after single-line ')' before a word — blank lines do not license it"
+			: "newline after single-line ')' before a word: cohere it, or it is a statement macro",
+			Fix_kind::none, 0, 0, V_cat::suspect
 		}
 	);
 }
 
-// §9.3 개행의 발생원 — 행머리의 이어감 토큰 (@마스크).
-// `else`·`catch`, 그리고 do 블록의 꼬리 `while` 은 문장을 잇는 토큰이라 그 앞에 문장 경계가
-// 없다 — 숨은 세미콜론(§4.2)이 문법 조건에서 기각되는 자리이므로, 그 앞의 개행은 발생원이
-// 없어 위반이다. 행머리 판정만으로 충분하다: 이 토큰들이 행을 시작하는 순간이 곧 위반이고,
-// `}` 와의 사이에 공행이 끼어도(공행은 발생원이 아니다, §9.4) 같은 판정이 그대로 잡으며,
-// do 앵커 확인은 Prev_significant 가 공행을 건너 준다.
-static void Check_continuation_head(
+// §4.3 절 연쇄의 응집·분리 (@마스크). `else`·`catch`, 그리고 do 블록 꼬리 `while` 은 앞 블록의
+// 닫는 `}` 와 가상연산자 `▽` 로 이어진다. 본체가 다중행이면 `▽` 가 개행하므로 이 토큰은 `}` 의
+// 다음 행 머리에 와야 하고(같은 행 응집=위반), 본체가 단일행이면 `▽` 가 개행하지 않으므로 `}` 와
+// 한 행에 응집해야 한다(다음 행 분리=위반). 판정은 그 `}` 의 짝 `{` 이 다른 행인지(다중행 본체)로만
+// 한다 — 짝을 못 찾거나 앞이 `}` 가 아니면 보수적으로 침묵한다(매크로·불완전).
+static void Check_continuation_cohesion(
 	Lines const &mask, int const row, std::vector<Violation> &out
 ){
-	int const c = ::First_significant_col(mask[row]);
+	std::string const &m = mask[row];
+	int const n = static_cast<int>(m.size());
 
-	if( c < 0 || !::Word_starts_at(mask[row], c) ){
-		return;
-	}
-
-	for(int i = 0; i < c; ++i){
-		if(mask[row][i] == '@'){ // 행머리에 주석·리터럴 꼬리가 있으면 §2 인접 — 보수적 침묵
-			return;
+	for(int c = 0; c < n; ++c){
+		if( !::Word_starts_at(m, c) ){
+			continue;
 		}
-	}
 
-	std::string const w = ::Word_at(mask[row], c);
+		std::string const w = ::Word_at(m, c);
+		bool is_clause = w == "else" || w == "catch";
 
-	if(w == "else" || w == "catch"){
-		out.push_back(
-			{
-				row, c, "9.3",
-				"newline before '" + w + "': it must continue on its block's '}' line"
+		if( w == "while" && ::Is_do_tail(mask, row, c) ){
+			is_clause = true;
+		}
+
+		if(!is_clause){
+			continue;
+		}
+
+		int pr = row, pc = c - 1;
+
+		if( !::Prev_significant(mask, pr, pc) || mask[pr][pc] != '}' ){
+			continue;
+		}
+
+		bool const glued = pr == row;
+
+		// 행머리 이어감인데 행머리에 주석·리터럴 꼬리(@)가 끼면 §2 인접 — 보수적 침묵.
+		if(!glued){
+			bool at_head = true;
+
+			for(int i = 0; i < c; ++i){
+				if(m[i] != ' ' && m[i] != '\t'){
+					at_head = false;
+
+					break;
+				}
 			}
-		);
 
-		return;
-	}
-
-	if( w == "while" && ::Is_do_tail(mask, row, c) ){
-		out.push_back(
-			{
-				row, c, "9.3",
-				"newline before do-while 'while': it must continue on the do block's '}' line"
+			if(!at_head){
+				continue;
 			}
-		);
+		}
+
+		int br = pr, bc = pc;
+
+		if( !::Match_brace_back(mask, br, bc) ){
+			continue;
+		}
+
+		bool const multiline_body = br != pr;
+
+		if(glued && multiline_body){
+			out.push_back(
+				{ row, c, "4.3", "'" + w + "' after a multi-line body: move it to the next line" }
+			);
+		}
+		else if(!glued && !multiline_body){
+			out.push_back(
+				{ row, c, "4.3", "'" + w + "' after a single-line body: cohere it on the '}' line" }
+			);
+		}
 	}
 }
 
@@ -942,6 +987,25 @@ static auto Has_code(std::string const &mask_row)->bool{
 // 들여쓰기 비교는 인접 행이 "코드 토큰을 포함하는 행"일 때만 의미가 있다.
 // 인접 행이 전처리 본문(§2 제외 — `\` 연장 행 포함)·주석 only·문자열 only 면
 // 그 행의 raw 들여쓰기는 spec 상 들여쓰기가 아니므로 비교 대상에서 뺀다.
+// 행 R 이 닫는 숨은 중괄호 `⦄▽` 의 자리(물리적 빈 행)인가 — 공행이고, 아래로 공행을 건너 만나는
+// 첫 비공행이 라벨 행이면 그렇다. 이 자리의 공행은 §5.6 리듬이 관할하므로 §9.4 형상 검사에서 뺀다.
+static auto Is_hidden_gap_row(Lines const &lines, Lines const &mask, int const r)->bool{
+	if( !::Is_blank_row(lines[r]) ){
+		return false;
+	}
+
+	int const rows = static_cast<int>(lines.size());
+	int d = r + 1;
+
+	while( d < rows && ::Is_blank_row(lines[d]) ){
+		++d;
+	}
+
+	int hc = 0;
+
+	return d < rows && ::Label_row(mask, d, hc);
+}
+
 static void Check_blank_line(
 	Lines const &lines, Lines const &mask, int const row, std::vector<Violation> &out
 ){
@@ -949,16 +1013,16 @@ static void Check_blank_line(
 		return;
 	}
 
-	int const last = static_cast<int>(lines.size()) - 1;
-
-	if(row == 0 || row == last){
-		out.push_back({ row, 0, "9.4", "blank line at file boundary" });
-
-		return;
+	if( ::Is_hidden_gap_row(lines, mask, row) ){
+		return; // §5.6 리듬 관할 — ⦄▽ 자리의 공행
 	}
 
-	if( ::Is_blank_row(lines[row - 1]) || ::Is_blank_row(lines[row + 1]) ){
-		out.push_back({ row, 0, "9.4", "consecutive blank lines" });
+	int const last = static_cast<int>(lines.size()) - 1;
+
+	// 파일 경계 — 첫 행 공행, 그리고 EOF 에 인접한 꼬리 공행(파일 끝 개행 하나 너머의 여분)은 위반.
+	// 그 밖의 자리에서 공행이 연속하는 것은 §9.4 신판에서 허용한다(4연속·연속 금지 조항 폐지).
+	if(row == 0 || row == last){
+		out.push_back({ row, 0, "9.4", "blank line at file boundary" });
 
 		return;
 	}
@@ -1319,10 +1383,12 @@ static auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
 			out.push_back({ i, 1, Tk_cls::sep });
 
 			break;
+
 		case '.':
 			out.push_back({ i, 1, Tk_cls::bin_ns });
 
 			break;
+
 		case '?':
 		case '=':
 		case '/':
@@ -1332,6 +1398,7 @@ static auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
 			out.push_back({ i, 1, Tk_cls::bin_s });
 
 			break;
+
 		default:
 			// * & + - < > : ! ~ 등 분류 의존 토큰은 모두 skip.
 			out.push_back({ i, 1, Tk_cls::skip });
@@ -1467,6 +1534,7 @@ static void Check_token_space(
 			}
 
 			break;
+
 		case Tk_cls::bin_ns:
 			if(!has_l || !has_r){
 				break;
@@ -1487,6 +1555,7 @@ static void Check_token_space(
 			}
 
 			break;
+
 		case Tk_cls::bin_s:
 			if( eff_l && l_operand && gap_before(i) == 0 ){
 				::Push_fix(
@@ -1503,12 +1572,14 @@ static void Check_token_space(
 			}
 
 			break;
+
 		case Tk_cls::inc_dec:
 			if( eff_l && eff_r && gap_before(i) > 0 && gap_after(i) > 0 ){
 				out.push_back({ row, t.col, "8.4", "'++'/'--' must attach to operand" });
 			}
 
 			break;
+
 		default:
 			break;
 		}
@@ -1616,6 +1687,53 @@ static void Check_multiline_bracket(
 // §5.6 숨은 중괄호 — case/default/접근지정자(public/private/protected) 라인은
 // 그 라인을 *직접 둘러싼 가장 안쪽 `{ }` brace* 와 같은 들여쓰기여야 한다.
 // 외곽 함수 본체나 namespace 본체와의 들여쓰기는 비교 대상이 아니다.
+// 행 r 이 숨은 중괄호의 라벨 행인가 — `case`/`default`, 또는 `:` 를 뒤에 둔 접근 지정자.
+// 라벨 행이면 그 첫 의미 열을 head_col 에 채우고 true. (§5.6 리듬·닫힘 판정에 공유.)
+static auto Label_row(Lines const &mask, int const r, int &head_col)->bool{
+	if( r < 0 || r >= static_cast<int>(mask.size()) || !::Has_code(mask[r]) ){
+		return false;
+	}
+
+	std::string const &m = mask[r];
+	int first = 0;
+	int const m_n = static_cast<int>(m.size());
+
+	while( first < m_n && (m[first] == ' ' || m[first] == '\t' || m[first] == '@') ){
+		++first;
+	}
+
+	if(first >= m_n){
+		return false;
+	}
+
+	std::string const head = ::Word_at(m, first);
+
+	bool const is_case_or_default = head == "case" || head == "default";
+	bool const is_access = head == "public" || head == "private" || head == "protected";
+
+	if(!is_case_or_default && !is_access){
+		return false;
+	}
+
+	// 접근지시자는 `public`/`private`/`protected` 바로 뒤 (공백 skip) 가 `:` 여야 한다.
+	// 아니면 상속 리스트의 `public Base` 등 다른 문맥이라 §5.6 대상 아님.
+	if(is_access){
+		int p = first + static_cast<int>(head.size());
+
+		while( p < m_n && (m[p] == ' ' || m[p] == '\t' || m[p] == '@') ){
+			++p;
+		}
+
+		if(p >= m_n || m[p] != ':'){
+			return false;
+		}
+	}
+
+	head_col = first;
+
+	return true;
+}
+
 static void Check_hidden_brace(
 	Lines const &lines, Lines const &mask,
 	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
@@ -1623,50 +1741,8 @@ static void Check_hidden_brace(
 	int const rows = static_cast<int>(lines.size());
 
 	for(int r = 0; r < rows; ++r){
-		if( lines[r].empty() || !::Has_code(mask[r]) ){
+		if( int head_col = 0; !::Label_row(mask, r, head_col) ){
 			continue;
-		}
-
-		std::string const &m = mask[r];
-		int first = 0;
-		int const m_n = static_cast<int>(m.size());
-
-		while( first < m_n && (m[first] == ' ' || m[first] == '\t' || m[first] == '@') ){
-			++first;
-		}
-
-		if(first >= m_n){
-			continue;
-		}
-
-		std::string const head = ::Word_at(m, first);
-
-		bool const  
-			is_case_or_default
-			= head == "case" || head == "default"
-		;
-
-		bool const  
-			is_access_keyword
-			= head == "public" || head == "private" || head == "protected"
-		;
-
-		if(!is_case_or_default && !is_access_keyword){
-			continue;
-		}
-
-		// 접근지시자는 `public`/`private`/`protected` 바로 뒤 (공백 skip) 가 `:` 여야 한다.
-		// 아니면 상속 리스트의 `public Base` 등 다른 문맥이라 §5.6 대상 아님.
-		if(is_access_keyword){
-			int p = first + static_cast<int>(head.size());
-
-			while( p < m_n && (m[p] == ' ' || m[p] == '\t' || m[p] == '@') ){
-				++p;
-			}
-
-			if(p >= m_n || m[p] != ':'){
-				continue;
-			}
 		}
 
 		Bk_pair const *inner = nullptr;
@@ -1693,10 +1769,40 @@ static void Check_hidden_brace(
 				Fix_kind::indent, 0, o_ind
 			);
 		}
+
+		// §5.6 리듬 — 닫는 숨은 중괄호 `⦄▽` 는 물리적으로 빈 행이다. 라벨 위의 공행 수를 세어,
+		// 위 첫 비공행이 여는 `{`(빈 첫 구간) 또는 다른 라벨(빈 낙하 구간)이면 붕괴로 공행 0,
+		// 내용 행이면 공행 정확히 1 을 요구한다. 첫 비공행이 주석·전처리면 보수적으로 침묵한다.
+		// 개행 삽입·삭제는 edit 이 못 하므로 힌트 없이 [manual] 로 남긴다.
+		int p = r - 1;
+		int blanks = 0;
+
+		while( p >= 0 && ::Is_blank_row(lines[p]) ){
+			++blanks;
+			--p;
+		}
+
+		if( p >= inner->o_row && ::Has_code(mask[p]) ){
+			int hc = 0;
+			bool const empty_section = p == inner->o_row || ::Label_row(mask, p, hc);
+			int const want = empty_section ? 0 : 1;
+
+			if(blanks != want){
+				out.push_back(
+					{
+						r, r_ind, "5.6",
+						empty_section
+						? "hidden-brace rhythm: no blank line before this label (empty section)"
+						: "hidden-brace rhythm: exactly one blank line required before this label"
+					}
+				);
+			}
+		}
 	}
 }
 
-// §5.7 다중행 [[ ]] 의 닫는 ']]' 가 행 마지막 코드 토큰인지.
+// §4.3 다중행 [[ ]] 의 닫는 ']]' 뒤에 피연산 토큰(단어)이 이어지면 `▽` 가 개행하므로 ']]' 가
+// 행 마지막 토큰이어야 한다. 부착·종결 토큰은 `▽` 자리가 아니라 침묵(단어만 위반).
 static void Check_attribute_close(
 	Lines const &mask, Bk_pair const &p, std::vector<Violation> &out
 ){
@@ -1709,7 +1815,11 @@ static void Check_attribute_close(
 
 	for(int cc = c_end; cc < c_n; ++cc){
 		if( ::Is_code_char(c_line[cc]) ){
-			out.push_back({ p.c_row, cc, "5.7", "']]' not last token" });
+			if( ::is_word_char(c_line[cc]) ){
+				out.push_back(
+					{ p.c_row, cc, "4.3", "']]' before an operand: it must end the line" }
+				);
+			}
 
 			break;
 		}
@@ -1761,9 +1871,11 @@ static void Check_anchor_keyword_semicolon(
 
 					if(ch == '(' || ch == '[' || ch == '{'){
 						++depth;
-					} else if(ch == ')' || ch == ']' || ch == '}'){
+					}
+					else if(ch == ')' || ch == ']' || ch == '}'){
 						--depth;
-					} else if(ch == ';' && depth == 0){
+					}
+					else if(ch == ';' && depth == 0){
 						close_row = rr;
 						close_col = cc;
 
@@ -1901,7 +2013,8 @@ static void Check_anchor_trailing_return(
 
 			if(p >= 0){
 				trailing = m[p] == ')';
-			} else{
+			}
+			else{
 				// `->` 가 행 시작 — 이전 코드 행 마지막 비공백 토큰을 본다.
 				int pr = r - 1;
 
@@ -1941,9 +2054,11 @@ static void Check_anchor_trailing_return(
 
 				if(ch == '(' || ch == '[' || ch == '{'){
 					++depth;
-				} else if(ch == ')' || ch == ']' || ch == '}'){
+				}
+				else if(ch == ')' || ch == ']' || ch == '}'){
 					--depth;
-				} else if(ch == ';' && depth == 0){
+				}
+				else if(ch == ';' && depth == 0){
 					found = true;
 
 					break;
@@ -2154,9 +2269,11 @@ static void Check_anchor_case(
 
 				if(ch == '(' || ch == '[' || ch == '{'){
 					++depth;
-				} else if(ch == ')' || ch == ']' || ch == '}'){
+				}
+				else if(ch == ')' || ch == ']' || ch == '}'){
 					--depth;
-				} else if(ch == ':' && depth == 0){
+				}
+				else if(ch == ':' && depth == 0){
 					bool const  
 						is_scope
 						= (cc + 1 < n && m[cc + 1] == ':') || (cc > 0 && m[cc - 1] == ':')
@@ -2211,17 +2328,23 @@ static void Check_colon_vbracket_layout(
 
 			if(ch == '('){
 				++p_depth;
-			} else if(ch == ')'){
+			}
+			else if(ch == ')'){
 				--p_depth;
-			} else if(ch == '['){
+			}
+			else if(ch == '['){
 				++sq_depth;
-			} else if(ch == ']'){
+			}
+			else if(ch == ']'){
 				--sq_depth;
-			} else if(ch == '<'){
+			}
+			else if(ch == '<'){
 				++ang_depth;
-			} else if(ch == '>' && ang_depth > 0){
+			}
+			else if(ch == '>' && ang_depth > 0){
 				--ang_depth;
-			} else if(ch == '{'){
+			}
+			else if(ch == '{'){
 				bool const  
 					inside_expr
 					= p_depth > 0 || sq_depth > 0 || ang_depth > 0
@@ -2280,7 +2403,8 @@ static void Check_colon_vbracket_layout(
 				}
 
 				++c_depth;
-			} else if(ch == '}'){
+			}
+			else if(ch == '}'){
 				if(p_depth > 0 || sq_depth > 0 || ang_depth > 0){
 					continue;
 				}
@@ -2288,7 +2412,8 @@ static void Check_colon_vbracket_layout(
 				if(c_depth > 0){
 					--c_depth;
 				}
-			} else if(
+			}
+			else if(
 				ch == ';'
 				&& p_depth == 0 && sq_depth == 0 && ang_depth == 0 && c_depth == 0
 			){
@@ -2431,22 +2556,29 @@ static void Scan_type_decl_colon(
 
 					if(ch == '('){
 						++p_depth;
-					} else if(ch == ')'){
+					}
+					else if(ch == ')'){
 						--p_depth;
-					} else if(ch == '['){
+					}
+					else if(ch == '['){
 						++sq_depth;
-					} else if(ch == ']'){
+					}
+					else if(ch == ']'){
 						--sq_depth;
-					} else if(ch == '<'){
+					}
+					else if(ch == '<'){
 						++ang_depth;
-					} else if(ch == '>' && ang_depth > 0){
+					}
+					else if(ch == '>' && ang_depth > 0){
 						--ang_depth;
-					} else if(p_depth == 0 && sq_depth == 0 && ang_depth == 0){
+					}
+					else if(p_depth == 0 && sq_depth == 0 && ang_depth == 0){
 						if(ch == ';' || ch == '{'){
 							stopped = true;
 
 							break;
-						} else if(ch == ':'){
+						}
+						else if(ch == ':'){
 							bool const  
 								is_scope
 								= (cc + 1 < cn && cm[cc + 1] == ':')
@@ -2566,13 +2698,17 @@ static void Scan_ctor_init_colon(
 
 					if(pc == ')'){
 						++p_d;
-					} else if(pc == '('){
+					}
+					else if(pc == '('){
 						--p_d;
-					} else if(pc == ']'){
+					}
+					else if(pc == ']'){
 						++s_d;
-					} else if(pc == '['){
+					}
+					else if(pc == '['){
 						--s_d;
-					} else if(p_d == 0 && s_d == 0){
+					}
+					else if(p_d == 0 && s_d == 0){
 						if(pc == ';' || pc == '{' || pc == '}'){
 							start_row = lr;
 							start_col = lc + 1;
@@ -2608,16 +2744,21 @@ static void Scan_ctor_init_colon(
 
 						if(sc == '('){
 							++p_d;
-						} else if(sc == ')'){
+						}
+						else if(sc == ')'){
 							--p_d;
-						} else if(sc == '['){
+						}
+						else if(sc == '['){
 							++s_d;
-						} else if(sc == ']'){
+						}
+						else if(sc == ']'){
 							--s_d;
-						} else if(p_d == 0 && s_d == 0){
+						}
+						else if(p_d == 0 && s_d == 0){
 							if(sc == '?'){
 								++q_count;
-							} else if(sc == ':'){
+							}
+							else if(sc == ':'){
 								bool const  
 									sub_scope
 									= (cc + 1 < sn && sm[cc + 1] == ':')
@@ -2712,9 +2853,11 @@ static void Check_anchor_var_decl_marker(
 
 				if(ch == '(' || ch == '[' || ch == '{'){
 					++depth;
-				} else if(ch == ')' || ch == ']' || ch == '}'){
+				}
+				else if(ch == ')' || ch == ']' || ch == '}'){
 					--depth;
-				} else if(ch == ';' && depth == 0){
+				}
+				else if(ch == ';' && depth == 0){
 					close_row = rr;
 					close_col = cc;
 
@@ -2897,7 +3040,8 @@ static auto Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pai
 
 					break;
 				}
-			} else{
+			}
+			else{
 				while( p_c < n && (m[p_c] == ' ' || m[p_c] == '\t' || m[p_c] == '@') ){
 					++p_c;
 				}
@@ -2980,7 +3124,8 @@ static auto Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pai
 
 						if(cc == ch){
 							++inner;
-						} else if(cc == close_ch){
+						}
+						else if(cc == close_ch){
 							--inner;
 						}
 
@@ -3386,9 +3531,123 @@ static void Check_angle_close_last(
 				break;
 			}
 
-			out.push_back({ p.c_row, cc, "5.7", "angle: '>' not last token on line" });
+			// §4.3 — 다중행 닫는 `>` 뒤에 피연산 토큰(단어)이 이어지면 `▽` 가 개행하므로 `>` 가
+			// 행 끝에 남아야 한다(위반). 부착·종결 토큰(`(`·`::`·`;` 등)은 `▽` 자리가 아니라 침묵.
+			if( ::is_word_char(c_line[cc]) ){
+				out.push_back(
+					{ p.c_row, cc, "4.3", "'>' before an operand: it must end the line" }
+				);
+			}
 
 			break;
+		}
+	}
+}
+
+// 다중행 꺾쇠의 닫는 `>` 뒤로 이어지는 `::식별자(::식별자)*` 타입 사슬의 끝(마지막 식별자
+// 바로 뒤) 열을 돌려준다. 사슬 꼴이 아니면 -1.
+static auto Angle_chain_end(std::string const &m, int const from)->int{
+	int const n = static_cast<int>(m.size());
+	int i = from;
+
+	if(i + 1 >= n || m[i] != ':' || m[i + 1] != ':'){
+		return -1;
+	}
+
+	while(i + 1 < n && m[i] == ':' && m[i + 1] == ':'){
+		i += 2;
+
+		if( i >= n || !::is_word_char(m[i]) ){
+			return -1;
+		}
+
+		while( i < n && ::is_word_char(m[i]) ){
+			++i;
+		}
+	}
+
+	return i;
+}
+
+// P5 약식 꼬리 — 타입이 끝난 지점 뒤가 `<공백> 식별자 (;|,|=)` 꼴(선언자를 타입 닫는 행에
+// 붙인 약식)인지 본다. 그 밖(호출 `(`·부착 `{`·표현식 `==` 등)은 거짓(위양성 0).
+// decor_head 는 식별자 앞의 데코레이터 `*`·`&` 허용 여부 — 인라인 타입의 `}` 는 피연산자가
+// 될 수 없어 곱셈·비트 AND 와 모호하지 않으므로 중괄호 쪽만 허용한다(꺾쇠 사슬 끝은 값일 수
+// 있어 불허).
+static auto Glued_declarator_tail(
+	std::string const &m, int const from, bool const decor_head
+)->bool{
+	int const n = static_cast<int>(m.size());
+	int i = from, ws = 0;
+
+	while( i < n && (m[i] == ' ' || m[i] == '\t') ){
+		++i;
+		++ws;
+	}
+
+	if(ws == 0){
+		return false;
+	}
+
+	if(decor_head){
+		while( i < n && (m[i] == '*' || m[i] == '&') ){
+			++i;
+		}
+	}
+
+	if( i >= n || !::is_word_char(m[i]) ){
+		return false;
+	}
+
+	while( i < n && ::is_word_char(m[i]) ){
+		++i;
+	}
+
+	while( i < n && (m[i] == ' ' || m[i] == '\t') ){
+		++i;
+	}
+
+	return i < n && (m[i] == ';' || m[i] == ',' || m[i] == '=');
+}
+
+// §5.5 P5 — 다중행 타입의 변수 선언은 가상 괄호를 전개해야 한다. 다중행 `<...>` 의 닫는 행이
+// `>::사슬 <공백> 식별자 (;|,|=)` 꼴이면 위반. 좁게 — 사슬과 약식 꼬리가 정확히 맞는 자리만
+// 본다(위양성 0).
+static void Check_declarator_expansion(
+	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
+){
+	if(p.o_row == p.c_row){
+		return;
+	}
+
+	int const i = ::Angle_chain_end(mask[p.c_row], p.c_col + 1);
+
+	if( i >= 0 && ::Glued_declarator_tail(mask[p.c_row], i, false) ){
+		out.push_back(
+			{ p.c_row, p.c_col, "5.5", "multi-line declaration must expand its virtual bracket" }
+		);
+	}
+}
+
+// §5.5 P5 — 인라인 타입 정의도 동일하다. 다중행 `{...}` 로 타입을 정의한 변수 선언문의 닫는
+// 행이 `} <공백> 식별자 (;|,|=)` 꼴이면 위반. 선언자가 하나든 여럿이든 같다.
+static void Check_declarator_expansion_brace(
+	Lines const &mask, std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
+){
+	for(Bk_pair const &p : pairs){
+		bool const  
+			target
+			= p.o_row != p.c_row && ::Is_inline_type_close(mask, p)
+			&& ::Glued_declarator_tail(mask[p.c_row], p.c_col + p.c_len, true)
+		;
+
+		if(target){
+			out.push_back(
+				{
+					p.c_row, p.c_col, "5.5",
+					"multi-line declaration must expand its virtual bracket"
+				}
+			);
 		}
 	}
 }
@@ -3441,7 +3700,8 @@ static void Check_angle_boundary(
 				Fix_kind::gap_right, p.c_col + 1, 0
 			);
 		}
-	} else if( ::is_word_char(nx) ){
+	}
+	else if( ::is_word_char(nx) ){
 		if(!has_space){
 			::Push_fix(
 				out, { p.c_row, p.c_col + 1, "8.4", "angle: '>' and word need one space" },
@@ -3610,7 +3870,8 @@ static void Check_keyword_position(
 			out.push_back(
 				{ row, toks[i].col, "3", "const/volatile/constexpr must follow its type" }
 			);
-		} else if( ::is_basic_type(w0) && stor1 ){
+		}
+		else if( ::is_basic_type(w0) && stor1 ){
 			out.push_back({ row, toks[i + 1].col, "3", "static/inline must precede its type" });
 		}
 	}
@@ -3658,35 +3919,6 @@ static void Check_unary_juxtaposition(
 // §5.7 템플릿 헤더의 닫는 꺾쇠 뒤에는 단일행·다중행을 불문하고 반드시 개행을 둔다.
 // 여는 `<` 바로 앞이 `template` 단어인 짝만 헤더로 보고, 닫는 `>` 가 그 행의 마지막 의미
 // 토큰인지 검사한다(행끝 주석은 §2 제외 대상이라 마스크에서 `@` — 마지막 토큰 판정에 무해).
-static void Check_template_header_newline(
-	Lines const &mask, Angle_pair const &a, std::vector<Violation> &out
-){
-	static char const * const Kw = "template";
-	int const kw_len = 8;
-
-	if(a.o_col < kw_len){
-		return;
-	}
-
-	std::string const &m = mask[a.o_row];
-
-	for(int i = 0; i < kw_len; ++i){
-		if(m[a.o_col - kw_len + i] != Kw[i]){
-			return;
-		}
-	}
-
-	if( a.o_col > kw_len && ::is_word_char(m[a.o_col - kw_len - 1]) ){
-		return;
-	}
-
-	if( ::Last_significant_col(mask[a.c_row]) != a.c_col ){
-		out.push_back(
-			{ a.c_row, a.c_col, "5.7", "newline required after template header" }
-		);
-	}
-}
-
 // 표기 판정 — 파일 전역 토큰 스트림.
 //
 // Tokenize_8_3(§8.4) 은 한 행만 보고, 문맥 의존 글리프(* & + - < > : && << >> :: ! ~ ...)를
@@ -3796,17 +4028,23 @@ static auto Lex_to_adj(Tk_cls const lex, std::string const &text)->Adj_cls{
 	switch(lex){
 	case Tk_cls::word:
 		return Adj_cls::word;
+
 	case Tk_cls::open_b:
 		return Adj_cls::open_b;
+
 	case Tk_cls::close_b:
 		return Adj_cls::close_b;
+
 	case Tk_cls::sep:
 		return text == ";" ? Adj_cls::semi : Adj_cls::comma;
+
 	case Tk_cls::bin_ns:
 	case Tk_cls::bin_s:
 		return Adj_cls::bidir;
+
 	case Tk_cls::inc_dec:
 		return Adj_cls::unidir;
+
 	default:
 		return Adj_cls::unresolved;
 	}
@@ -3948,7 +4186,8 @@ static void Mark_suspects(
 
 			if(toks[i].cls == Adj_cls::open_b){
 				open.push_back(i);
-			} else if(toks[i].cls == Adj_cls::close_b && !open.empty()){
+			}
+			else if(toks[i].cls == Adj_cls::close_b && !open.empty()){
 				open.pop_back();
 			}
 		}
@@ -4170,25 +4409,32 @@ static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 			&& toks[ el[i] ].text == "operator"
 		){
 			t.cls = Adj_cls::word;
-		} else if(t.cls == Adj_cls::unresolved && t.text == "'"){
+		}
+		else if(t.cls == Adj_cls::unresolved && t.text == "'"){
 			t.cls = Adj_cls::word; // 숫자 구분자 — 리터럴의 일부다(`0x1'000`)
-		} else if(t.cls == Adj_cls::unresolved){
+		}
+		else if(t.cls == Adj_cls::unresolved){
 			std::string const &x = t.text;
 
 			if(x == "!" || x == "~"){
 				t.cls = Adj_cls::unidir;
-			} else if(x == "<<"){
+			}
+			else if(x == "<<"){
 				t.cls = Adj_cls::bidir;
-			} else if(x == "..."){
+			}
+			else if(x == "..."){
 				t.cls = att_l || att_r ? Adj_cls::unidir : Adj_cls::operand_like;
-			} else if(x == "::"){
+			}
+			else if(x == "::"){
 				// 범위해결 `::` 는 양쪽에 붙는다(§8.4). 왼쪽이 떨어져 있으면 왼쪽 피연산자가
 				// 없다는 뜻이니 전역 범위 `::` 다 — 앞 행을 닫은 `}` 를 꼬리로 오인하지 않는다.
 				t.cls
 				= att_l && is_tail(el[i]) ? Adj_cls::bidir : Adj_cls::unidir;
-			} else if(x == "+" || x == "-"){
+			}
+			else if(x == "+" || x == "-"){
 				t.cls = is_tail(el[i]) ? Adj_cls::bidir : Adj_cls::unidir;
-			} else if(x == "*" || x == "&" || x == "&&"){
+			}
+			else if(x == "*" || x == "&" || x == "&&"){
 				bool const mem_ptr = x == "*" && att_l && toks[ el[i] ].text == "::";
 
 				// 데코레이터끼리 엮이면(중첩) 서로 붙는다(§8.4).
@@ -4198,26 +4444,33 @@ static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 					t.cls
 					= att_r && is_attachable(er[i]) ? Adj_cls::unidir
 					: Adj_cls::operand_like;
-				} else if(att_l){
+				}
+				else if(att_l){
 					// 왼쪽에 붙었다 — 양방향(양쪽 공백)도, 단방향(반대쪽 공백)도, 피연산
 					// (비기호형과 공백)도 될 수 없다. 어느 분류의 합법 표기와도 맞지 않는다.
 					t.cls = Adj_cls::unresolved;
-				} else if( att_r && is_attachable(er[i]) ){
+				}
+				else if( att_r && is_attachable(er[i]) ){
 					t.cls = Adj_cls::unidir;
-				} else if( spc_l && spc_r && is_tail(el[i]) && is_head(er[i]) ){
+				}
+				else if( spc_l && spc_r && is_tail(el[i]) && is_head(er[i]) ){
 					t.cls = Adj_cls::bidir;
-				} else{
+				}
+				else{
 					// 붙을 선언 대상도, 양옆의 피연산자도 없다 — 피연산 데코레이터다.
 					t.cls = Adj_cls::operand_like;
 				}
-			} else if(x == "<"){
+			}
+			else if(x == "<"){
 				if(att_l && toks[ el[i] ].cls == Adj_cls::word){
 					t.cls = Adj_cls::angle_open;
 					stack.push_back({ i, depth });
-				} else if(spc_l && spc_r){
+				}
+				else if(spc_l && spc_r){
 					t.cls = Adj_cls::bidir;
 				}
-			} else if(x == ">" || x == ">>"){
+			}
+			else if(x == ">" || x == ">>"){
 				if(!stack.empty() && stack.back().depth == depth){
 					t.cls = Adj_cls::angle_close;
 					stack.pop_back();
@@ -4225,17 +4478,21 @@ static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 					if(x == ">>" && !stack.empty() && stack.back().depth == depth){
 						stack.pop_back();
 					}
-				} else if(spc_l && spc_r){
-					t.cls = Adj_cls::bidir;
 				}
-			} else if(x == ":"){
-				if(att_l){
-					t.cls = Adj_cls::unidir;
-				} else if(spc_l && spc_r){
+				else if(spc_l && spc_r){
 					t.cls = Adj_cls::bidir;
 				}
 			}
-		} else if(t.cls == Adj_cls::comma && er[i] < 0){
+			else if(x == ":"){
+				if(att_l){
+					t.cls = Adj_cls::unidir;
+				}
+				else if(spc_l && spc_r){
+					t.cls = Adj_cls::bidir;
+				}
+			}
+		}
+		else if(t.cls == Adj_cls::comma && er[i] < 0){
 			t.cls = Adj_cls::unidir; // 트레일링 콤마 — 뒤가 닫는 괄호다
 		}
 
@@ -4251,7 +4508,8 @@ static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 			}
 
 			++depth;
-		} else if(t.cls == Adj_cls::close_b){
+		}
+		else if(t.cls == Adj_cls::close_b){
 			flush(depth);
 
 			if(depth > 0){
@@ -4261,7 +4519,8 @@ static void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 			if(t.text == "}"){
 				flush(0);
 			}
-		} else if(t.cls == Adj_cls::semi){
+		}
+		else if(t.cls == Adj_cls::semi){
 			flush(0);
 		}
 
@@ -4317,7 +4576,8 @@ static auto Adjudicated_angles(std::vector<Adj_tok> const &toks)->std::vector<An
 	for(int i = 0; i < n; ++i){
 		if(toks[i].cls == Adj_cls::angle_open){
 			stack.push_back(i);
-		} else if(toks[i].cls == Adj_cls::angle_close){
+		}
+		else if(toks[i].cls == Adj_cls::angle_close){
 			int pops = toks[i].len == 2 ? 2 : 1;
 
 			while(pops-- > 0 && !stack.empty()){
@@ -4559,6 +4819,49 @@ struct Shield{
 	int row, lo, hi;
 };
 
+// 다중행 타입의 닫는 행에서, 타입이 끝난 지점(from) 뒤가 단일행 변수 선언 가상 괄호(선언자
+// 나열 + 같은 행의 종결 `;`)이면 그 `;` 의 열을 돌려준다. 아니면 -1. 선언자 머리는 식별자와
+// `*`·`&`·`(` 만 인정하고, `;` 는 괄호 깊이 0 에서 찾는다.
+static auto Var_decl_close_semi(std::string const &m, int const from)->int{
+	int const n = static_cast<int>(m.size());
+	int i = from, ws = 0;
+
+	while( i < n && (m[i] == ' ' || m[i] == '\t') ){
+		++i;
+		++ws;
+	}
+
+	bool const  
+		head
+		= ws != 0 && i < n
+		&& ( ::is_word_char(m[i]) || m[i] == '*' || m[i] == '&' || m[i] == '(' )
+	;
+
+	if(!head){
+		return -1;
+	}
+
+	for(int depth = 0; i < n; ++i){
+		char const c = m[i];
+
+		if(c == '(' || c == '[' || c == '{'){
+			++depth;
+		}
+		else if(c == ')' || c == ']' || c == '}'){
+			if(depth == 0){
+				return -1;
+			}
+
+			--depth;
+		}
+		else if(c == ';' && depth == 0){
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 // §9.2 — 개행 경쟁 범위.
 //
 // 다중행 상태의 기호형 토큰·괄호는, 자기 경쟁 범위 안에 **자기보다 개행 우선순위가 높은 단일행
@@ -4566,10 +4869,12 @@ struct Shield{
 // 다음 행, 다중행 괄호면 여는 행과 닫는 행, 세미콜론이면 자기 행뿐이다.
 //
 // 단일행 괄호 안은 통째로 하나의 피연산 토큰이라(§6.2) 경쟁에 노출되지 않는다 — 생성자
-// 멤버초기화 리스트·상속 리스트처럼 단일행 가상 괄호를 이루는 자리도 마찬가지다(§5.5).
+// 멤버초기화 리스트·상속 리스트·변수 선언문처럼 단일행 가상 괄호를 이루는 자리도
+// 마찬가지다(§5.5).
 static void Check_break_competition(
-	std::vector<Adj_tok> const &toks, std::vector<Bk_pair> const &pairs,
-	std::vector<Angle_pair> const &angles, std::vector<Violation> &out
+	Lines const &mask, std::vector<Adj_tok> const &toks,
+	std::vector<Bk_pair> const &pairs, std::vector<Angle_pair> const &angles,
+	std::vector<Violation> &out
 ){
 	int const n = static_cast<int>(toks.size());
 
@@ -4588,6 +4893,39 @@ static void Check_break_competition(
 	for(Angle_pair const &a : angles){
 		if(a.o_row == a.c_row){
 			shields.push_back({ a.o_row, a.o_col, a.c_col });
+		}
+	}
+
+	// 변수 선언문의 단일행 가상 괄호 — 다중행 타입(인라인 타입 정의)이 끝난 `}` 뒤부터 같은
+	// 행의 종결 `;` 까지가 하나의 피연산 토큰이다. 안의 구분자·초기화자는 경쟁에 노출되지
+	// 않는다.
+	for(Bk_pair const &p : pairs){
+		if( p.o_row != p.c_row && ::Is_inline_type_close(mask, p) ){
+			int const semi = ::Var_decl_close_semi(mask[p.c_row], p.c_col + p.c_len);
+
+			if(semi >= 0){
+				shields.push_back({ p.c_row, p.c_col, semi });
+			}
+		}
+	}
+
+	// 다중행 꺾쇠 타입(`>::사슬`)의 변수 선언문도 동일하다 — 사슬이 끝난 지점 뒤부터 종결
+	// `;` 까지가 단일행 가상 괄호다.
+	for(Angle_pair const &a : angles){
+		if(a.o_row == a.c_row){
+			continue;
+		}
+
+		int const chain = ::Angle_chain_end(mask[a.c_row], a.c_col + 1);
+
+		if(chain < 0){
+			continue;
+		}
+
+		int const semi = ::Var_decl_close_semi(mask[a.c_row], chain);
+
+		if(semi >= 0){
+			shields.push_back({ a.c_row, a.c_col, semi });
 		}
 	}
 
@@ -5186,7 +5524,8 @@ static void Check_glued_declarator(
 
 		if(lead.cls == Adj_cls::word || lead.cls == Adj_cls::angle_close){
 			decl = lead.text != "concept";
-		} else if(
+		}
+		else if(
 			lead.cls == Adj_cls::unidir
 			&& (lead.text == "*" || lead.text == "&" || lead.text == "&&")
 		){
@@ -5530,26 +5869,37 @@ static auto Adj_name(Adj_cls const cls)->char const *{
 	switch(cls){
 	case Adj_cls::word:
 		return "word";
+
 	case Adj_cls::lit:
 		return "lit";
+
 	case Adj_cls::open_b:
 		return "open";
+
 	case Adj_cls::close_b:
 		return "close";
+
 	case Adj_cls::semi:
 		return "semi";
+
 	case Adj_cls::comma:
 		return "comma";
+
 	case Adj_cls::bidir:
 		return "bidir";
+
 	case Adj_cls::unidir:
 		return "unidir";
+
 	case Adj_cls::operand_like:
 		return "operand";
+
 	case Adj_cls::angle_open:
 		return "angle_open";
+
 	case Adj_cls::angle_close:
 		return "angle_close";
+
 	default:
 		return "unresolved";
 	}
@@ -5623,7 +5973,9 @@ static auto Cut_tail_comment(Lines const &src, Seg_lines const &segs)->Lines{
 	return out;
 }
 
-auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violation>{
+auto check_lines(
+	Lines const &lines, Seg_lines const &segs, bool const final_newline
+)->std::vector<Violation>{
 	std::vector<Violation> out;
 	Lines const mask = ::render_mask(lines, segs);
 	Lines const cut_lines = ::Cut_tail_comment(lines, segs);
@@ -5642,6 +5994,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	::Check_anchor_keyword_semicolon(lines, mask, out);
 	::Check_anchor_trailing_return(lines, mask, out);
 	::Check_anchor_inline_type(cut_lines, cut_mask, pairs, out);
+	::Check_declarator_expansion_brace(mask, pairs, out);
 	::Check_anchor_case(lines, mask, out);
 	::Check_anchor_colon_vbracket(lines, mask, out);
 	::Check_anchor_var_decl_marker(cut_lines, cut_mask, out);
@@ -5662,9 +6015,9 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	for(Angle_pair const &a : angles){
 		::Check_multiline_angle(lines, mask, a, out);
 		::Check_angle_close_last(mask, a, out);
+		::Check_declarator_expansion(mask, a, out);
 		::Check_angle_boundary(mask, a, out);
 		::Check_angle_inner_space(mask, angles, a, out);
-		::Check_template_header_newline(mask, a, out);
 	}
 
 	for(int row = 0; row < rows; ++row){
@@ -5676,7 +6029,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		::Check_ctrl_brace(mask, row, out);
 		::Check_word_paren_space(mask[row], row, out);
 		::Check_word_paren_newline(lines, mask, row, out);
-		::Check_continuation_head(mask, row, out);
+		::Check_continuation_cohesion(mask, row, out);
 		::Check_blank_line(lines, mask, row, out);
 		::Check_token_space(mask[row], row, out);
 		::Check_keyword_position(mask[row], row, out);
@@ -5690,7 +6043,7 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 	std::vector<Violation> pass2;
 	::Check_adjudicated_space(toks, pass2);
 	::Check_break_form(toks, pass2);
-	::Check_break_competition(toks, pairs, angles, pass2);
+	::Check_break_competition(mask, toks, pairs, angles, pass2);
 	::Check_operator_blank_line(lines, mask, toks, pairs, pass2);
 	::Check_unary_pair(toks, pass2);
 	::Check_qualifier_prefix(toks, pass2);
@@ -5712,6 +6065,16 @@ auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violati
 		if(v.row >= 0 && v.row < rows && gated[v.row] == 0){
 			out.push_back(v);
 		}
+	}
+
+	// §9.4 — 파일은 개행으로 끝나야 한다(마지막 행은 공행). 개행이 아니라 비어 있지 않은 코드로
+	// 끝나면 위반. 개행을 만들 수 없으므로 edit 은 손대지 못한다([manual]).
+	if(!final_newline && rows > 0){
+		int const last = rows - 1;
+
+		out.push_back(
+			{ last, static_cast<int>(lines[last].size()), "9.4", "missing newline at end of file" }
+		);
 	}
 
 	return out;
@@ -5824,14 +6187,16 @@ static void Apply_edit_op(std::string &line, Edit_op const &op){
 	}
 }
 
-auto edit_lines(Lines const &input, int const lo, int const hi)->Edit_result{
+auto edit_lines(
+	Lines const &input, int const lo, int const hi, bool const final_newline
+)->Edit_result{
 	Lines lines = input;
 	std::vector<Edit_note> fixed_notes;
 
 	// 고정점까지 반복 — 매 패스 재검사해 자동교정 힌트(fix != none)를 모아 적용한다.
 	for(int pass = 0; pass < 8; ++pass){
 		Seg_lines const segs = ::scan_lines(lines);
-		std::vector<Violation> const viol = ::check_lines(lines, segs);
+		std::vector<Violation> const viol = ::check_lines(lines, segs, final_newline);
 
 		// 신호 공백 불가침 — 판정에 참여하는 공백의 유무를 자동교정이 뒤집어선 안 된다.
 		Lines const mask = ::render_mask(lines, segs);
@@ -5922,7 +6287,7 @@ auto edit_lines(Lines const &input, int const lo, int const hi)->Edit_result{
 
 	// 자동교정 밖에 남은 위반(범위 안)을 manual 로 기록 — 사람·AI 인계 목록.
 	Seg_lines const segs = ::scan_lines(res.lines);
-	std::vector<Violation> const remain = ::check_lines(res.lines, segs);
+	std::vector<Violation> const remain = ::check_lines(res.lines, segs, final_newline);
 
 	for(Violation const &v : remain){
 		if(v.row < lo || v.row > hi){

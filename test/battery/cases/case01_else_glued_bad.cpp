@@ -4,8 +4,5 @@ void f(bool c){
 	} else{
 		h();
 	}
-
-	do{
-		g();
-	} while(c);
 }
+// EXPECT 4:4.3

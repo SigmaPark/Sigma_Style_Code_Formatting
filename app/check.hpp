@@ -32,7 +32,10 @@ struct Violation{
 };
 
 // 행들을 규약 검사해 위반을 낸다(§1.1·§1.3는 raw 행, §8.2·§3 등은 @마스크 위에서).
-auto check_lines(Lines const &lines, Seg_lines const &segs)->std::vector<Violation>;
+// final_newline — 파일이 개행으로 끝나는가(§9.4 파일 끝 개행). 거짓이면 마지막 행에 위반을 낸다.
+auto check_lines(
+	Lines const &lines, Seg_lines const &segs, bool final_newline
+)->std::vector<Violation>;
 
 // 검증용 렌더러 — 표기 판정 스트림을 토큰마다 한 행씩 덤프한다("행:열 분류 우선순위 원문").
 auto render_classes(Lines const &lines, Seg_lines const &segs)->Lines;
@@ -55,4 +58,4 @@ struct Edit_result{
 // 공백·탭만 삽입/삭제해 위반을 결정적으로 고친다(개행·비공백 불가침). 고정점까지 반복하고,
 // [lo, hi] (0-기준 포함범위) 밖 행은 손대지 않는다. 회귀 게이트(공백·탭 제거 후 바이트 동일 +
 // 행 수 불변)를 실패하면 ok=false 로 원본을 그대로 돌려준다.
-auto edit_lines(Lines const &input, int lo, int hi)->Edit_result;
+auto edit_lines(Lines const &input, int lo, int hi, bool final_newline)->Edit_result;
