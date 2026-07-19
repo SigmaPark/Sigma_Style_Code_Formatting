@@ -3544,6 +3544,63 @@ static void Check_angle_close_last(
 	}
 }
 
+// §5.5 P5 — 다중행 타입의 변수 선언은 가상 괄호를 전개해야 한다. 다중행 `<...>` 의 닫는 행이
+// `>::식별자(::식별자)* <공백> 식별자 (;|,|=)` 꼴(선언자를 타입 닫는 행에 붙인 약식)이면 위반.
+// 좁게 — `>` 뒤가 `::` 로 이어지는 타입 사슬이고, 그 뒤에 공백을 사이에 둔 선언자 단어와 종결이
+// 오는 자리만 본다. 그 밖(호출 `(`·부착 `{`·표현식 `==` 등)은 침묵(위양성 0).
+static void Check_declarator_expansion(
+	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
+){
+	if(p.o_row == p.c_row){
+		return;
+	}
+
+	std::string const &m = mask[p.c_row];
+	int const n = static_cast<int>(m.size());
+	int i = p.c_col + 1;
+
+	if(i + 1 >= n || m[i] != ':' || m[i + 1] != ':'){
+		return;
+	}
+
+	while(i + 1 < n && m[i] == ':' && m[i + 1] == ':'){
+		i += 2;
+
+		if( i >= n || !::is_word_char(m[i]) ){
+			return;
+		}
+
+		while( i < n && ::is_word_char(m[i]) ){
+			++i;
+		}
+	}
+
+	int ws = 0;
+
+	while( i < n && (m[i] == ' ' || m[i] == '\t') ){
+		++i;
+		++ws;
+	}
+
+	if( ws == 0 || i >= n || !::is_word_char(m[i]) ){
+		return;
+	}
+
+	while( i < n && ::is_word_char(m[i]) ){
+		++i;
+	}
+
+	while( i < n && (m[i] == ' ' || m[i] == '\t') ){
+		++i;
+	}
+
+	if( i < n && (m[i] == ';' || m[i] == ',' || m[i] == '=') ){
+		out.push_back(
+			{ p.c_row, p.c_col, "5.5", "multi-line declaration must expand its virtual bracket" }
+		);
+	}
+}
+
 // §8.4 경계 공백 — 여는 `<` 직전 word 는 무공백, 닫는 `>` 직후 word 는 공백·`(` `[` 은 무공백.
 static void Check_angle_boundary(
 	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
@@ -5828,6 +5885,7 @@ auto check_lines(
 	for(Angle_pair const &a : angles){
 		::Check_multiline_angle(lines, mask, a, out);
 		::Check_angle_close_last(mask, a, out);
+		::Check_declarator_expansion(mask, a, out);
 		::Check_angle_boundary(mask, a, out);
 		::Check_angle_inner_space(mask, angles, a, out);
 	}
