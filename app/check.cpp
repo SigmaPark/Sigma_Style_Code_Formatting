@@ -690,6 +690,7 @@ static auto First_significant_col(std::string const &mask_row)->int{
 }
 
 static auto Has_code(std::string const &mask_row)->bool;
+static auto Label_row(Lines const &mask, int r, int &head_col)->bool;
 
 // 순수 공행만 건너 다음 코드 행을 찾는다(공행 판정은 raw 행, 코드 판정은 마스크/컷마스크).
 // 공행은 개행의 발생원이 아니라 인가된 자리에 쌓인 형상(§9.4)이므로, 개행 자리 검사는 공행을
@@ -986,11 +987,34 @@ static auto Has_code(std::string const &mask_row)->bool{
 // 들여쓰기 비교는 인접 행이 "코드 토큰을 포함하는 행"일 때만 의미가 있다.
 // 인접 행이 전처리 본문(§2 제외 — `\` 연장 행 포함)·주석 only·문자열 only 면
 // 그 행의 raw 들여쓰기는 spec 상 들여쓰기가 아니므로 비교 대상에서 뺀다.
+// 행 R 이 닫는 숨은 중괄호 `⦄▽` 의 자리(물리적 빈 행)인가 — 공행이고, 아래로 공행을 건너 만나는
+// 첫 비공행이 라벨 행이면 그렇다. 이 자리의 공행은 §5.6 리듬이 관할하므로 §9.4 형상 검사에서 뺀다.
+static auto Is_hidden_gap_row(Lines const &lines, Lines const &mask, int const r)->bool{
+	if( !::Is_blank_row(lines[r]) ){
+		return false;
+	}
+
+	int const rows = static_cast<int>(lines.size());
+	int d = r + 1;
+
+	while( d < rows && ::Is_blank_row(lines[d]) ){
+		++d;
+	}
+
+	int hc = 0;
+
+	return d < rows && ::Label_row(mask, d, hc);
+}
+
 static void Check_blank_line(
 	Lines const &lines, Lines const &mask, int const row, std::vector<Violation> &out
 ){
 	if( !::Is_blank_row(lines[row]) ){
 		return;
+	}
+
+	if( ::Is_hidden_gap_row(lines, mask, row) ){
+		return; // §5.6 리듬 관할 — ⦄▽ 자리의 공행
 	}
 
 	int const last = static_cast<int>(lines.size()) - 1;
@@ -1363,10 +1387,12 @@ static auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
 			out.push_back({ i, 1, Tk_cls::sep });
 
 			break;
+
 		case '.':
 			out.push_back({ i, 1, Tk_cls::bin_ns });
 
 			break;
+
 		case '?':
 		case '=':
 		case '/':
@@ -1376,6 +1402,7 @@ static auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
 			out.push_back({ i, 1, Tk_cls::bin_s });
 
 			break;
+
 		default:
 			// * & + - < > : ! ~ 등 분류 의존 토큰은 모두 skip.
 			out.push_back({ i, 1, Tk_cls::skip });
@@ -1511,6 +1538,7 @@ static void Check_token_space(
 			}
 
 			break;
+
 		case Tk_cls::bin_ns:
 			if(!has_l || !has_r){
 				break;
@@ -1531,6 +1559,7 @@ static void Check_token_space(
 			}
 
 			break;
+
 		case Tk_cls::bin_s:
 			if( eff_l && l_operand && gap_before(i) == 0 ){
 				::Push_fix(
@@ -1547,12 +1576,14 @@ static void Check_token_space(
 			}
 
 			break;
+
 		case Tk_cls::inc_dec:
 			if( eff_l && eff_r && gap_before(i) > 0 && gap_after(i) > 0 ){
 				out.push_back({ row, t.col, "8.4", "'++'/'--' must attach to operand" });
 			}
 
 			break;
+
 		default:
 			break;
 		}
@@ -1741,6 +1772,35 @@ static void Check_hidden_brace(
 				out, { r, 0, "5.6", "hidden close: indent must equal enclosing brace" },
 				Fix_kind::indent, 0, o_ind
 			);
+		}
+
+		// §5.6 리듬 — 닫는 숨은 중괄호 `⦄▽` 는 물리적으로 빈 행이다. 라벨 위의 공행 수를 세어,
+		// 위 첫 비공행이 여는 `{`(빈 첫 구간) 또는 다른 라벨(빈 낙하 구간)이면 붕괴로 공행 0,
+		// 내용 행이면 공행 정확히 1 을 요구한다. 첫 비공행이 주석·전처리면 보수적으로 침묵한다.
+		// 개행 삽입·삭제는 edit 이 못 하므로 힌트 없이 [manual] 로 남긴다.
+		int p = r - 1;
+		int blanks = 0;
+
+		while( p >= 0 && ::Is_blank_row(lines[p]) ){
+			++blanks;
+			--p;
+		}
+
+		if( p >= inner->o_row && ::Has_code(mask[p]) ){
+			int hc = 0;
+			bool const empty_section = p == inner->o_row || ::Label_row(mask, p, hc);
+			int const want = empty_section ? 0 : 1;
+
+			if(blanks != want){
+				out.push_back(
+					{
+						r, r_ind, "5.6",
+						empty_section
+						? "hidden-brace rhythm: no blank line before this label (empty section)"
+						: "hidden-brace rhythm: exactly one blank line required before this label"
+					}
+				);
+			}
 		}
 	}
 }
@@ -3864,17 +3924,23 @@ static auto Lex_to_adj(Tk_cls const lex, std::string const &text)->Adj_cls{
 	switch(lex){
 	case Tk_cls::word:
 		return Adj_cls::word;
+
 	case Tk_cls::open_b:
 		return Adj_cls::open_b;
+
 	case Tk_cls::close_b:
 		return Adj_cls::close_b;
+
 	case Tk_cls::sep:
 		return text == ";" ? Adj_cls::semi : Adj_cls::comma;
+
 	case Tk_cls::bin_ns:
 	case Tk_cls::bin_s:
 		return Adj_cls::bidir;
+
 	case Tk_cls::inc_dec:
 		return Adj_cls::unidir;
+
 	default:
 		return Adj_cls::unresolved;
 	}
@@ -5621,26 +5687,37 @@ static auto Adj_name(Adj_cls const cls)->char const *{
 	switch(cls){
 	case Adj_cls::word:
 		return "word";
+
 	case Adj_cls::lit:
 		return "lit";
+
 	case Adj_cls::open_b:
 		return "open";
+
 	case Adj_cls::close_b:
 		return "close";
+
 	case Adj_cls::semi:
 		return "semi";
+
 	case Adj_cls::comma:
 		return "comma";
+
 	case Adj_cls::bidir:
 		return "bidir";
+
 	case Adj_cls::unidir:
 		return "unidir";
+
 	case Adj_cls::operand_like:
 		return "operand";
+
 	case Adj_cls::angle_open:
 		return "angle_open";
+
 	case Adj_cls::angle_close:
 		return "angle_close";
+
 	default:
 		return "unresolved";
 	}

@@ -324,16 +324,22 @@ static auto Kind_name(Seg_kind const k)->std::string{
 	switch(k){
 	case Seg_kind::comment:
 		return "COMMENT";
+
 	case Seg_kind::string_lit:
 		return "STRING";
+
 	case Seg_kind::char_lit:
 		return "CHAR";
+
 	case Seg_kind::raw_string:
 		return "RAW_STRING";
+
 	case Seg_kind::preproc:
 		return "PREPROC";
+
 	case Seg_kind::code:
 		return "CODE";
+
 	default:
 		return "?";
 	}
