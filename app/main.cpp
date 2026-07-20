@@ -68,7 +68,8 @@ static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<st
 				out.emplace_back(it->path().generic_string());
 			}
 		}
-	} else{
+	}
+	else{
 		fs::directory_iterator const end;
 		std::error_code ec;
 
@@ -126,7 +127,8 @@ static auto Parse_line_range(std::string const &s, Line_range &out)->bool{
 				}
 
 				out_v = static_cast<std::size_t>(v);
-			} catch(...){
+			}
+			catch(...){
 				return false;
 			}
 
@@ -150,32 +152,6 @@ static auto Parse_line_range(std::string const &s, Line_range &out)->bool{
 
 	return true;
 }
-
-// 한 파일을 검사해 위반을 출력하고, 위반 개수를 돌려준다. 범위 밖의 위반은 건너뛴다.
-static auto Check_file(std::string const &path, Line_range const range)->std::size_t{
-	Lines const lines = ::Read_lines(path);
-	Seg_lines const segs = ::scan_lines(lines);
-	std::vector<Violation> const violations = ::check_lines(lines, segs);
-
-	std::size_t hits = 0;
-
-	for(Violation const &v : violations){
-		std::size_t const line_no = static_cast<std::size_t>(v.row) + 1;
-
-		if(line_no < range.start || line_no > range.end){
-			continue;
-		}
-
-		std::cout
-		<< path << ":" << v.row + 1 << ":" << v.col + 1
-		<< " [" << v.rule << "] " << v.message << "\n";
-
-		++hits;
-	}
-
-	return hits;
-}
-//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 // 원문 바이트를 행 내용과 종결자로 갈라 담는다 — edit 이 개행 종류·마지막 개행을 그대로 보존한다.
 struct Raw_file{
@@ -221,6 +197,63 @@ static auto Read_raw(std::string const &path, Raw_file &out)->bool{
 
 	return true;
 }
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
+// 한 파일을 검사해 위반을 출력하고, 위반 개수를 돌려준다. 범위 밖의 위반은 건너뛴다.
+// 용의는 [suspect] 로 함께 출력하되 반환값(=종료코드)에 넣지 않고 suspects 로만 센다.
+static auto Check_file(
+	std::string const &path, Line_range const range, std::size_t &suspects
+)->std::size_t{
+	Raw_file raw;
+
+	if( !::Read_raw(path, raw) ){
+		std::cerr << "error: cannot read: " << path << "\n";
+
+		return 0;
+	}
+
+	bool const final_nl = raw.terms.empty() || !raw.terms.back().empty();
+	Lines const &lines = raw.contents;
+	Seg_lines const segs = ::scan_lines(lines);
+	std::vector<Violation> const violations = ::check_lines(lines, segs, final_nl);
+
+	std::size_t hits = 0;
+
+	for(Violation const &v : violations){
+		std::size_t const line_no = static_cast<std::size_t>(v.row) + 1;
+
+		if(line_no < range.start || line_no > range.end){
+			continue;
+		}
+
+		bool const is_suspect = v.cat == V_cat::suspect;
+
+		std::cout
+		<< path << ":" << v.row + 1 << ":" << v.col + 1
+		<< " [" << v.rule << "] " << v.message
+		<< (is_suspect ? " [suspect]" : "") << "\n";
+
+		if(is_suspect){
+			++suspects;
+		}
+		else{
+			++hits;
+		}
+	}
+
+	return hits;
+}
+
+// 검증용 — 표기 판정 스트림을 그대로 덤프한다(개발자 진단용 숨은 플래그).
+static void Dump_classes(std::string const &path){
+	Lines const lines = ::Read_lines(path);
+	Seg_lines const segs = ::scan_lines(lines);
+
+	for( std::string const &s : ::render_classes(lines, segs) ){
+		std::cout << path << ":" << s << "\n";
+	}
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 // range(1-기준 [start,end]) 를 edit_lines 용 0-기준 포함범위 [lo,hi] 로 바꾼다.
 static auto Range_to_lo_hi(Line_range const range, int &lo, int &hi)->void{
@@ -247,7 +280,8 @@ static auto Edit_file(std::string const &path, Line_range const range, bool cons
 	int lo = 0, hi = 0;
 	::Range_to_lo_hi(range, lo, hi);
 
-	Edit_result const res = ::edit_lines(raw.contents, lo, hi);
+	bool const final_nl = raw.terms.empty() || !raw.terms.back().empty();
+	Edit_result const res = ::edit_lines(raw.contents, lo, hi, final_nl);
 
 	if(!res.ok){
 		std::cerr << path << ": edit aborted (regression gate failed); left unchanged\n";
@@ -258,12 +292,20 @@ static auto Edit_file(std::string const &path, Line_range const range, bool cons
 	std::size_t manual = 0;
 
 	for(Edit_note const &note : res.notes){
+		char const *tail = " [manual]";
+
+		if(note.cat == V_cat::suspect){
+			tail = " [suspect]";
+		}
+		else if(note.fixed){
+			tail = " (fixed)";
+		}
+
 		std::cout
 		<< path << ":" << note.row + 1 << ":" << note.col + 1
-		<< " [" << note.rule << "] " << note.message
-		<< (note.fixed ? " (fixed)" : " [manual]") << "\n";
+		<< " [" << note.rule << "] " << note.message << tail << "\n";
 
-		if(!note.fixed){
+		if(note.cat == V_cat::violation && !note.fixed){
 			++manual;
 		}
 	}
@@ -329,12 +371,9 @@ auto main(int const argc, char const * const *argv)->int{
 	bool recur = false;
 	bool has_range = false;
 	bool dry = false;
+	bool classes = false;
 
-	Line_range range
-	= {
-		1,
-		std::numeric_limits<std::size_t>::max()
-	};
+	Line_range range{ 1, std::numeric_limits<std::size_t>::max() };
 
 	std::string target;
 	bool parse_ok = true;
@@ -344,9 +383,14 @@ auto main(int const argc, char const * const *argv)->int{
 
 		if(a == "-r"){
 			recur = true;
-		} else if(a == "-n" || a == "--dry-run"){
+		}
+		else if(a == "-n" || a == "--dry-run"){
 			dry = true;
-		} else if(a == "-b"){
+		}
+		else if(a == "--classes"){
+			classes = true;
+		}
+		else if(a == "-b"){
 			if(i + 1 >= args.size()){
 				std::cerr << "error: -b requires a range argument (e.g. 3:50, 3:, :50)\n";
 				parse_ok = false;
@@ -362,9 +406,11 @@ auto main(int const argc, char const * const *argv)->int{
 			}
 
 			has_range = true;
-		} else if(target.empty()){
+		}
+		else if(target.empty()){
 			target = a;
-		} else{
+		}
+		else{
 			std::cerr << "error: unexpected argument: " << a << "\n";
 			parse_ok = false;
 			break;
@@ -388,6 +434,12 @@ auto main(int const argc, char const * const *argv)->int{
 
 		return 2;
 	}
+
+	if(classes && edit_mode){
+		std::cerr << "error: --classes is a check-mode diagnostic\n";
+
+		return 2;
+	}
 	//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 	fs::path const path = target;
@@ -403,7 +455,15 @@ auto main(int const argc, char const * const *argv)->int{
 			return ::Edit_file(target, range, dry) == 0 ? 0 : 1;
 		}
 
-		return ::Check_file(target, range) == 0 ? 0 : 1;
+		if(classes){
+			::Dump_classes(target);
+
+			return 0;
+		}
+
+		std::size_t suspects = 0;
+
+		return ::Check_file(target, range, suspects) == 0 ? 0 : 1;
 	}
 
 	if( std::error_code ec; fs::is_directory(path, ec) ){
@@ -426,14 +486,30 @@ auto main(int const argc, char const * const *argv)->int{
 			return manual == 0 ? 0 : 1;
 		}
 
-		std::size_t total = 0, files = 0;
+		std::size_t total = 0, files = 0, suspects = 0;
 
 		for( std::string const &f : ::Collect_sources(path, recur) ){
-			total += ::Check_file(f, range);
+			if(classes){
+				::Dump_classes(f);
+			}
+			else{
+				total += ::Check_file(f, range, suspects);
+			}
+
 			++files;
 		}
 
-		std::cout << "[sak] " << files << " file(s), " << total << " violation(s)\n";
+		if(classes){
+			return 0;
+		}
+
+		std::cout << "[sak] " << files << " file(s), " << total << " violation(s)";
+
+		if(suspects != 0){
+			std::cout << ", " << suspects << " suspect(s)";
+		}
+
+		std::cout << "\n";
 
 		return total == 0 ? 0 : 1;
 	}
