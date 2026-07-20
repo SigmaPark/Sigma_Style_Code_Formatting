@@ -2,8 +2,8 @@
 #	SPDX-License-Identifier: MIT License
 #=========#=========#=========#=========#=========#=========#=========#=========#=========#=========
 
-# How2use 를 의존성으로 당겨온다. 오프라인이면 FETCHCONTENT_SOURCE_DIR_HOW2USE 로 로컬 클론을
-# 가리켜 네트워크 없이 구성할 수 있다(예: -DFETCHCONTENT_SOURCE_DIR_HOW2USE=../How2use).
+# Pull How2use in as a dependency. Offline, point FETCHCONTENT_SOURCE_DIR_HOW2USE at a local
+# clone to configure without the network (e.g. -DFETCHCONTENT_SOURCE_DIR_HOW2USE=../How2use).
 include(FetchContent)
 FetchContent_Declare(
 	How2use
@@ -26,8 +26,8 @@ if(UNIX)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 endif()
 
-# sak 검사기의 코어(main.cpp 를 제외한 전부)를 정적 라이브러리로 묶어 테스트가 직접 링크한다.
-# check.cpp 는 이미 check.hpp/lexer.hpp 뒤의 순수 함수라 분리 리팩터가 필요 없다.
+# Bundle the sak checker core (everything but main.cpp) as a static library the tests link.
+# check.cpp is already a pure function behind check.hpp/lexer.hpp, so it needs no split refactor.
 add_library(
 	sak_core STATIC
 	${CMAKE_CURRENT_SOURCE_DIR}/../app/check.cpp
@@ -40,7 +40,7 @@ if(MSVC)
 	target_compile_options(sak_core PRIVATE /utf-8)
 endif()
 
-# test/ 아래 모든 .cpp 를 테스트 실행파일로 묶는다. 케이스 모듈을 추가하면 재구성된다.
+# Gather every .cpp under test/ into the test executable. Adding a case module reconfigures it.
 file(
 	GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
 	${CMAKE_CURRENT_SOURCE_DIR}/*.cpp

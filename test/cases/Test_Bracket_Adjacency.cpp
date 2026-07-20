@@ -7,12 +7,12 @@
 
 #include "../sak_case.hpp"
 
-//	§8.5 의 v2.2.0 두 항 — 닫는 괄호와 여는 괄호 사이에는 공백을 두지 않고(앞의 닫는 괄호까지가
-//	하나의 피연산 토큰이고 그 뒤에서 새 괄호가 열린다), 인접한 두 비기호형 토큰 사이는 정확히 1칸.
+//	Rule 8.4 attach law (old 8.5 folded in) - no space between a closing bracket and an opening
+//	one (the closing bracket ends one operand, a new bracket opens), and one space between words.
 
 static auto Intro()->void{
 	h2u::mdo
-	<< h2u::Title(L"Rule 8.5 - Bracket adjacency and word spacing")
+	<< h2u::Title(L"Rule 8.4 - Bracket adjacency and word spacing")
 	<< L"A closing bracket followed by an opening one takes no space between them "
 	<< L"(`){`, `)(`, `][`), and two neighbouring non-symbolic tokens are separated by "
 	<< L"exactly one space."
@@ -23,7 +23,7 @@ static auto Close_open_spaced()->void{
 	Lines const snippet = { "if(cond) {" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_one("8.5", 0);
+	auto const want = sakt::expect_one("8.4", 0);
 
 	sakt::render_case(L"`if(cond) {` - flagged (space between `)` and `{`)", snippet, got);
 
@@ -34,7 +34,7 @@ static auto Call_chain_spaced()->void{
 	Lines const snippet = { "func(a) (b);" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_one("8.5", 0);
+	auto const want = sakt::expect_one("8.4", 0);
 
 	sakt::render_case(L"`func(a) (b);` - flagged (space between `)` and `(`)", snippet, got);
 
@@ -56,7 +56,7 @@ static auto Subscript_chain_spaced()->void{
 	Lines const snippet = { "table[i] [j];" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_one("8.5", 0);
+	auto const want = sakt::expect_one("8.4", 0);
 
 	sakt::render_case(L"`table[i] [j];` - flagged (space between `]` and `[`)", snippet, got);
 
@@ -67,7 +67,7 @@ static auto Words_padded()->void{
 	Lines const snippet = { "int  count = 0;" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_one("8.5", 0);
+	auto const want = sakt::expect_one("8.4", 0);
 
 	sakt::render_case(L"`int  count = 0;` - flagged (two spaces between words)", snippet, got);
 

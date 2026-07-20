@@ -7,12 +7,12 @@
 
 #include "../sak_case.hpp"
 
-//	§8.6 내용 없는 괄호쌍 (v2.2.0) — 단일행 괄호 안이 모두 공백뿐이면 그 공백을 제거하고,
-//	중첩 단계에도 세지 않는다. 중괄호도 예외가 아니다(n = 단계 + 1 이 빈 쌍에는 적용되지 않는다).
+//	Rule 8.5 empty bracket pairs (old 8.6) - a single-line pair holding only spaces loses them
+//	and never counts toward a nesting stage; a brace pair is no exception.
 
 static auto Intro()->void{
 	h2u::mdo
-	<< h2u::Title(L"Rule 8.6 - Empty bracket pairs")
+	<< h2u::Title(L"Rule 8.5 - Empty bracket pairs")
 	<< L"A single-line pair holding nothing but spaces loses those spaces (`f( )` becomes "
 	<< L"`f()`, `Foo{ }` becomes `Foo{}`), and an empty pair never counts toward the nesting "
 	<< L"stage of the bracket that encloses it."
@@ -23,7 +23,7 @@ static auto Paren_spaced()->void{
 	Lines const snippet = { "f( );" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_two("8.6", 0, "8.6", 0);
+	auto const want = sakt::expect_two("8.5", 0, "8.5", 0);
 
 	sakt::render_case(L"`f( );` - flagged on both sides of the empty pair", snippet, got);
 
@@ -45,7 +45,7 @@ static auto Brace_spaced()->void{
 	Lines const snippet = { "Foo{ };" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_two("8.6", 0, "8.6", 0);
+	auto const want = sakt::expect_two("8.5", 0, "8.5", 0);
 
 	sakt::render_case(L"`Foo{ };` - flagged (a brace pair is no exception)", snippet, got);
 

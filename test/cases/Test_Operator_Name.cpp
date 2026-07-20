@@ -7,8 +7,8 @@
 
 #include "../sak_case.hpp"
 
-//	§4.1 (v2.2.0) — `operator` 와 그 뒤의 표기는 함께 하나의 비기호형 토큰(함수 이름)이다.
-//	그 안의 기호는 연산자가 아니므로 §8.4 의 공백 규칙이 닿지 않는다.
+//	Rule 4.1 - `operator` and the token(s) after it form one non-symbolic token (a function
+//	name), so the symbols inside are not operators and the Rule 8.4 spacing does not reach them.
 
 static auto Intro()->void{
 	h2u::mdo

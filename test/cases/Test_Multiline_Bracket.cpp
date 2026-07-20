@@ -7,8 +7,8 @@
 
 #include "../sak_case.hpp"
 
-//	§5.4 다중행 괄호 — 여는 괄호는 행의 마지막, 닫는 괄호는 행의 처음, 여닫는 행 들여쓰기는 같고
-//	중간 행은 한 단계 깊게. 함수·인자 필러(compute/run 등)는 후배 모델 Yeon 산출.
+//	Rule 5.4 multi-line brackets - the opening bracket ends its line, the closing one begins
+//	its line, both share indentation, and the middle lines sit one level deeper.
 
 static auto Intro()->void{
 	h2u::mdo

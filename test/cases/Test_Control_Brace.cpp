@@ -7,8 +7,8 @@
 
 #include "../sak_case.hpp"
 
-//	Rule 3 — 제어문 중괄호 생략 금지. sak 은 if/else/for/while/switch/do-while 본체의 중괄호
-//	생략을 잡아내고, 이미 중괄호가 있으면 통과시킨다. 스니펫은 Lines 로 바이트 그대로 심는다.
+//	Rule 3 - control-flow braces may not be omitted. sak flags an omitted brace on an
+//	if/else/for/while/switch/do-while body and passes code that already carries one.
 
 static auto Intro()->void{
 	h2u::mdo

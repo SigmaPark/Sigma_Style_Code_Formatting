@@ -13,27 +13,42 @@
 
 namespace sakt{
 
-	// 스니펫은 행 목록(Lines)으로 직접 담는다 — 각 행이 명시적 문자열 리터럴이라 바이트가 정확하고
-	// (스니펫 내부 들여쓰기는 행 문자열 안의 '\t' 로 표현), 원시문자열의 flush-left 로 인한 구조
-	// 오인이 없다. sak 은 이 행들을 그대로(§2 문자열 리터럴 면제 위에서) 렉싱·검사한다.
-	auto run_sak(Lines const &snippet)->std::vector<Violation>;
+	// A snippet is held directly as a list of lines (Lines) - each line is an explicit string
+	// literal, so the bytes are exact (indentation inside a snippet is the '\t' within a line
+	// string) with no structural misread from a raw string's flush-left layout. sak lexes and
+	// checks these lines as-is (over the Rule 2 string-literal exemption).
+	//
+	// final_newline - whether the file ends with a newline (Rule 9.4). The default is true (a
+	// normal file); only a snippet that tests a missing EOF newline passes false.
+	auto run_sak(Lines const &snippet, bool final_newline = true)->std::vector<Violation>;
 
-	// 기대 위반 한 건 — 규칙 태그(정본 절 번호, 예: "8.4")와 0-기준 행.
+	// One expected finding - a rule tag (the spec section, e.g. "8.4"), a 0-based row, and
+	// a category (violation / suspect).
 	struct Expect{
 		std::string rule;
 		int row;
+		V_cat cat = V_cat::violation;
 	};
 
-	// 기대 목록 생성기 — H2U_ASSERT 안에서 중첩 괄호(§8.6) 없이 한 줄로 쓰도록 함수로 감싼다.
-	// 한 스니펫이 같은 자리에 두 위반을 내는 경우(예: §8.4 연산자 앞·뒤)엔 expect_two 를 쓴다.
+	// Expectation builders - wrapped in functions so a case reads on one line inside H2U_ASSERT
+	// without nested brackets (Rule 8.5). Use expect_two / expect_three when one snippet yields
+	// several findings at once, and expect_suspect where a notation clash (Rule 8.4) is a suspect.
 	auto expect_none()->std::vector<Expect>;
 	auto expect_one(std::string rule, int row)->std::vector<Expect>;
 	auto expect_two(std::string rule1, int row1, std::string rule2, int row2)->std::vector<Expect>;
 
-	// 실제 위반이 기대와 정확히 일치하는가((rule, row) 다중집합 기준, 순서 무관).
+	auto expect_three(
+		std::string rule1, int row1, std::string rule2, int row2, std::string rule3, int row3
+	)->std::vector<Expect>;
+
+	auto expect_suspect(std::string rule, int row)->std::vector<Expect>;
+
+	// Whether the actual findings match the expectation exactly (a (rule, row, cat) multiset,
+	// order-independent).
 	auto matches(std::vector<Violation> const &got, std::vector<Expect> const &want)->bool;
 
-	// 케이스를 살아있는 커버리지 문서에 렌더한다 — 소제목·스니펫 코드블록·sak 이 낸 위반 목록.
+	// Render a case into the living coverage document - a subheading, the snippet code block,
+	// and the list of findings sak produced.
 	auto render_case(
 		std::wstring const &title, Lines const &snippet, std::vector<Violation> const &got
 	)->void;

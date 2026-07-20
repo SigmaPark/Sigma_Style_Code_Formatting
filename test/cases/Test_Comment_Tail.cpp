@@ -7,8 +7,9 @@
 
 #include "../sak_case.hpp"
 
-//	§8.3 (v2.2.0) — 잉여공백은 행끝 주석을 걷어낸 뒤의 행에서 잰다. 그래서 §5.5 의 2칸 마커가
-//	주석과 나란히 설 수 있다. 정렬용 공백은 주석 바깥에 두면 §8.2(4연속 금지)에 걸리므로 안쪽에.
+//	Rule 8.3 - redundant whitespace is measured with the trailing comment stripped, so the
+//	Rule 5.5 two-space marker survives beside a comment; put alignment padding inside the comment
+//	(outside, it hits Rule 8.2's ban on four-in-a-row).
 
 static auto Intro()->void{
 	h2u::mdo
@@ -21,7 +22,7 @@ static auto Intro()->void{
 }
 
 static auto Marker_with_comment()->void{
-	Lines const
+	Lines const  
 		snippet
 		= {
 			"int const  // the marker survives the comment",
@@ -40,7 +41,7 @@ static auto Marker_with_comment()->void{
 }
 
 static auto Marker_with_comment_bad_layout()->void{
-	Lines const
+	Lines const  
 		snippet
 		= {
 			"int const  // the anchor is confirmed, so the layout is checked",

@@ -7,12 +7,12 @@
 
 #include "../sak_case.hpp"
 
-//	§8.4 이항연산자 공백 + §8.5 낱말·괄호 경계 공백. 필러(sum/notify 등)는 후배 모델 Yeon 산출.
-//	sak 은 문맥 무관 연산자(=, == 등)만 검사하고 +, <, * 등 모호 토큰은 서브에이전트에 미룬다.
+//	Rule 8.4 attach law - binary-operator spacing and the word/bracket boundary (old 8.5 folded
+//	in). sak checks only context-free operators (=, ==, ...); ambiguous +, <, * go to a subagent.
 
 static auto Intro()->void{
 	h2u::mdo
-	<< h2u::Title(L"Rule 8.4 / 8.5 - Token and bracket-boundary spacing")
+	<< h2u::Title(L"Rule 8.4 - Token and bracket-boundary spacing")
 	<< L"`sak` checks spacing around context-free binary operators (`=`, `==`, `+=`, ...) "
 	<< L"and the word/bracket boundary (`foo()` vs `foo ()`). Ambiguous tokens such as "
 	<< L"`+`, `<`, `*` are left to the subagent (they may be unary, template, or pointer)."
@@ -67,7 +67,7 @@ static auto Call_spaced_paren()->void{
 	Lines const snippet = { "notify (result);" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_one("8.5", 0);
+	auto const want = sakt::expect_one("8.4", 0);
 
 	sakt::render_case(L"`notify (result);` - flagged (space before `(`)", snippet, got);
 
@@ -89,7 +89,7 @@ static auto Call_spaced_paren_2()->void{
 	Lines const snippet = { "reset (count);" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_one("8.5", 0);
+	auto const want = sakt::expect_one("8.4", 0);
 
 	sakt::render_case(L"`reset (count);` - flagged (space before `(`)", snippet, got);
 

@@ -7,8 +7,8 @@
 
 #include "../sak_case.hpp"
 
-//	Rule 3 확장 케이스. 필러(조건·문장)는 후배 모델 Yeon 이 양산,
-//	바이트 정확한 템플릿 스탬핑·기대 판정은 라비서. sak 이 채점·검수.
+//	Rule 3, further cases. The condition/statement filler is mass-produced by the junior
+//	model Yeon; byte-exact stamping and the expected verdicts are the author's. sak scores them.
 
 static auto If_ident_no_brace()->void{
 	Lines const snippet = { "if(ready) run();" };
