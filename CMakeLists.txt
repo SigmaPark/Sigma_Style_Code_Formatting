@@ -28,3 +28,11 @@ add_executable(sak ${APP_SOURCES})
 if(MSVC)
 	target_compile_options(sak PRIVATE /utf-8)
 endif()
+
+# How2use 기반 sak 테스트 스위트(test/). 기본은 꺼 둔다 — 평소 sak 빌드/설치 경로를 건드리지 않는다.
+# 켜려면: cmake -S . -B build -DBUILD_SAK_TEST_PROJ=ON  후  --target sak_test 빌드.
+option(BUILD_SAK_TEST_PROJ "Build sak's How2use-based test suite" OFF)
+
+if(BUILD_SAK_TEST_PROJ)
+	add_subdirectory(test)
+endif()
