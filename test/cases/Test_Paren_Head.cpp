@@ -12,18 +12,58 @@
 static auto Intro()->void{
 	h2u::mdo
 	<< h2u::Title(L"Rules 4.3 / 9.3 - Splits notation cannot settle")
-	<< L"A newline between `)` and a word, or between `}` and `(`, may be a macro / IIFE or a new "
-	<< L"statement. Notation cannot decide, so `sak` marks these as suspects, not hard violations."
+	<< L"A newline between `)` and a word rides the virtual operator, so `sak` adjudicates it by "
+	<< L"break competition (Rule 9.2): a single-line token that outranks the virtual operator in "
+	<< L"the two rows makes the split a hard violation, no competitor makes it a licensed break, "
+	<< L"and blank lines in between stay suspects. A newline between `}` and `(` (IIFE or a new "
+	<< L"statement) still cannot be settled by notation, so it stays a suspect."
 	<< h2u::empty_line;
 }
 
-static auto Paren_word_suspect()->void{
+static auto Paren_word_licensed()->void{
 	Lines const snippet = { "TEST_MACRO(foo)", "static void Helper(){", "\trun();", "}" };
 
 	auto const got = sakt::run_sak(snippet);
-	auto const want = sakt::expect_suspect("4.3", 1);
+	auto const want = sakt::expect_none();
 
-	sakt::render_case(L"closing `)` before a word on the next line - suspect", snippet, got);
+	sakt::render_case(L"closing `)` before a word, no competitor - licensed break", snippet, got);
+
+	H2U_ASSERT( sakt::matches(got, want) );
+}
+
+static auto Paren_word_outranked()->void{
+	Lines const snippet = { "void f(){", "\tTEST_MACRO(foo)", "\tint x = 0;", "}" };
+
+	auto const got = sakt::run_sak(snippet);
+	auto const want = sakt::expect_one("4.3", 2);
+
+	sakt::render_case(
+		L"closing `)` before a word, single-line `=` outranks the break - violation", snippet, got
+	);
+
+	H2U_ASSERT( sakt::matches(got, want) );
+}
+
+static auto Qualifier_split_licensed()->void{
+	Lines const snippet = { "auto g(int x)", "noexcept;" };
+
+	auto const got = sakt::run_sak(snippet);
+	auto const want = sakt::expect_none();
+
+	sakt::render_case(L"qualifier after a single-line signature - licensed break", snippet, got);
+
+	H2U_ASSERT( sakt::matches(got, want) );
+}
+
+static auto Glued_pure_virtual_outranked()->void{
+	Lines const snippet = { "struct A{", "\tvirtual auto f(int x)", "\tconst = 0;", "};" };
+
+	auto const got = sakt::run_sak(snippet);
+	auto const want = sakt::expect_one("4.3", 2);
+
+	sakt::render_case(
+		L"`const = 0;` after the break - `=` must drop to its own row (Rule 4.3)", snippet, got
+	);
 
 	H2U_ASSERT( sakt::matches(got, want) );
 }
@@ -106,7 +146,10 @@ static auto Attach_ok()->void{
 
 H2U_HOW2USE_TESTS(sakt::Test_, Paren_Head, /**/){
 	::Intro,
-	::Paren_word_suspect,
+	::Paren_word_licensed,
+	::Paren_word_outranked,
+	::Qualifier_split_licensed,
+	::Glued_pure_virtual_outranked,
 	::Paren_blank_suspect,
 	::Iife_split_suspect,
 	::Stmt_paren_suspect,
