@@ -35,8 +35,11 @@ add_library(sak_core STATIC ${SAK_CORE_SOURCES})
 
 target_include_directories(sak_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../app)
 
+# 본체와 같은 경고 규율 — sak 소스만 대상으로 한다(외부 How2use 는 제외).
 if(MSVC)
-	target_compile_options(sak_core PRIVATE /utf-8)
+	target_compile_options(sak_core PRIVATE /utf-8 /W4 /WX)
+else()
+	target_compile_options(sak_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 # Gather every .cpp under test/ into the test executable. Adding a case module reconfigures it.
