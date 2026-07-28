@@ -27,12 +27,11 @@ if(UNIX)
 endif()
 
 # Bundle the sak checker core (everything but main.cpp) as a static library the tests link.
-# check.cpp is already a pure function behind check.hpp/lexer.hpp, so it needs no split refactor.
-add_library(
-	sak_core STATIC
-	${CMAKE_CURRENT_SOURCE_DIR}/../app/check.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../app/lexer.cpp
-)
+# The checker is split into semantic-unit files (check_*.cpp), so glob them to stay in sync.
+file(GLOB SAK_CORE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../app/*.cpp)
+list(REMOVE_ITEM SAK_CORE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../app/main.cpp)
+
+add_library(sak_core STATIC ${SAK_CORE_SOURCES})
 
 target_include_directories(sak_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../app)
 
