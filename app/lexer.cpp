@@ -9,23 +9,41 @@
 #include <cstddef>
 #include <string>
 
-enum class Mode{ normal, line_comment, block_comment, string_lit, char_lit, raw_string };
+namespace sak{
+	enum class Mode{ normal, line_comment, block_comment, string_lit, char_lit, raw_string };
+
+	struct Scan_state;
+	struct Line_result;
+
+	static auto is_digit_sep(std::string const &line, int const i)->bool;
+	static auto Word_start(std::string const &line, int const quote)->int;
+	static auto is_raw_prefix(std::string const &line, int const quote)->bool;
+	static auto raw_closes_at(std::string const &line, int const i, std::string const &delim)->bool;
+	static auto is_preproc_line(std::string const &line)->bool;
+
+	static auto Scan_one_line(
+		std::string const &line, int const row, Scan_state const &in
+	)->Line_result;
+
+	static auto Kind_name(Seg_kind const k)->std::string;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 // 행 사이로 넘기는 스캔 상태. raw_string 은 구분자를, preproc 은 '\' 줄연장을 이어간다.
-struct Scan_state{
+struct sak::Scan_state{
 	Mode mode;
 	std::string raw_delim;
 	bool preproc_cont;
 };
 
-struct Line_result{
+struct sak::Line_result{
 	std::vector<Segment> segs;
 	Scan_state out_state;
 };
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 // '가 문자 리터럴 시작이 아니라 숫자 구분자(1'000, 0xa'b)인지 어림한다.
-static auto is_digit_sep(std::string const &line, int const i)->bool{
+auto sak::is_digit_sep(std::string const &line, int const i)->bool{
 	if( i <= 0 || i + 1 >= static_cast<int>(line.size()) ){
 		return false;
 	}
@@ -39,7 +57,7 @@ static auto is_digit_sep(std::string const &line, int const i)->bool{
 }
 
 // '"'(위치 quote) 앞의 식별자 런 시작 위치.
-static auto Word_start(std::string const &line, int const quote)->int{
+auto sak::Word_start(std::string const &line, int const quote)->int{
 	int j = quote - 1;
 
 	while(j >= 0){
@@ -56,15 +74,15 @@ static auto Word_start(std::string const &line, int const quote)->int{
 }
 
 // '"'(위치 quote) 가 raw 문자열 접두사(R/LR/uR/UR/u8R) 뒤인지 판정한다.
-static auto is_raw_prefix(std::string const &line, int const quote)->bool{
-	int const start = ::Word_start(line, quote);
+auto sak::is_raw_prefix(std::string const &line, int const quote)->bool{
+	int const start = Word_start(line, quote);
 	std::string const pfx = line.substr(start, quote - start);
 
 	return pfx == "R" || pfx == "LR" || pfx == "uR" || pfx == "UR" || pfx == "u8R";
 }
 
 // 위치 i 의 ')' 에서 raw 문자열이 )delim" 로 닫히는지.
-static auto raw_closes_at(std::string const &line, int const i, std::string const &delim)->bool{
+auto sak::raw_closes_at(std::string const &line, int const i, std::string const &delim)->bool{
 	if(line[i] != ')'){
 		return false;
 	}
@@ -81,7 +99,7 @@ static auto raw_closes_at(std::string const &line, int const i, std::string cons
 }
 
 // 행의 첫 비공백 문자가 '#' 인지(전처리 지시행).
-static auto is_preproc_line(std::string const &line)->bool{
+auto sak::is_preproc_line(std::string const &line)->bool{
 	for(char const c : line){
 		if(c == ' ' || c == '\t'){
 			continue;
@@ -95,7 +113,7 @@ static auto is_preproc_line(std::string const &line)->bool{
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 // 한 행을 in 상태로 시작해 좌->우로 스캔, 세그먼트와 다음 행으로 넘길 상태를 낸다.
-static auto Scan_one_line(
+auto sak::Scan_one_line(
 	std::string const &line, int const row, Scan_state const &in
 )->Line_result{
 	int const n = static_cast<int>(line.size());
@@ -116,7 +134,7 @@ static auto Scan_one_line(
 	std::string raw_delim = in.raw_delim;
 
 	// normal 에서 시작하는 행이 '#' 지시행이면 통째로 preproc.
-	if( mode == Mode::normal && ::is_preproc_line(line) ){
+	if( mode == Mode::normal && is_preproc_line(line) ){
 		if(n > 0){
 			segs.push_back(Segment{ Seg_kind::preproc, row, 0, n });
 		}
@@ -165,8 +183,8 @@ static auto Scan_one_line(
 				mode = Mode::block_comment;
 				i += 2;
 			}
-			else if( c == '"' && ::is_raw_prefix(line, i) ){
-				int const pfx = ::Word_start(line, i);
+			else if( c == '"' && is_raw_prefix(line, i) ){
+				int const pfx = Word_start(line, i);
 
 				flush(pfx);
 				kind = Seg_kind::raw_string;
@@ -193,7 +211,7 @@ static auto Scan_one_line(
 				mode = Mode::string_lit;
 				i += 1;
 			}
-			else if( c == '\'' && !::is_digit_sep(line, i) ){
+			else if( c == '\'' && !is_digit_sep(line, i) ){
 				flush(i);
 				kind = Seg_kind::char_lit;
 				seg_start = i;
@@ -220,7 +238,7 @@ static auto Scan_one_line(
 			}
 		}
 		else if(mode == Mode::raw_string){
-			if( ::raw_closes_at(line, i, raw_delim) ){
+			if( raw_closes_at(line, i, raw_delim) ){
 				i += static_cast<int>(raw_delim.size()) + 2;
 				flush(i);
 				kind = Seg_kind::code;
@@ -278,14 +296,14 @@ static auto Scan_one_line(
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
-auto scan_lines(Lines const &lines)->Seg_lines{
+auto sak::scan_lines(Lines const &lines)->Seg_lines{
 	Scan_state carry{ Mode::normal, "", false };
 	int row = 0;
 	Seg_lines result;
 	result.reserve(lines.size());
 
 	for(std::string const &line : lines){
-		Line_result r = ::Scan_one_line(line, row, carry);
+		Line_result r = Scan_one_line(line, row, carry);
 
 		carry = r.out_state;
 		result.emplace_back( std::move(r.segs) );
@@ -296,7 +314,7 @@ auto scan_lines(Lines const &lines)->Seg_lines{
 }
 
 // 무효 세그먼트를 같은 길이의 '@' 로 덮고, code 는 원문 그대로 둔다(기하 1:1).
-auto render_mask(Lines const &lines, Seg_lines const &segs)->Lines{
+auto sak::render_mask(Lines const &lines, Seg_lines const &segs)->Lines{
 	int row = 0;
 	Lines out;
 	out.reserve(lines.size());
@@ -320,7 +338,7 @@ auto render_mask(Lines const &lines, Seg_lines const &segs)->Lines{
 	return out;
 }
 
-static auto Kind_name(Seg_kind const k)->std::string{
+auto sak::Kind_name(Seg_kind const k)->std::string{
 	switch(k){
 	case Seg_kind::comment:
 		return "COMMENT";
@@ -346,7 +364,7 @@ static auto Kind_name(Seg_kind const k)->std::string{
 }
 
 // 무효 세그먼트를 $KIND[고유번호][길이]$ 로, code 는 원문 그대로 직렬화한다.
-auto render_dump(Lines const &lines, Seg_lines const &segs)->Lines{
+auto sak::render_dump(Lines const &lines, Seg_lines const &segs)->Lines{
 	int idx = 0;
 	int row = 0;
 	Lines out;
@@ -361,7 +379,7 @@ auto render_dump(Lines const &lines, Seg_lines const &segs)->Lines{
 			}
 			else{
 				text += "$";
-				text += ::Kind_name(s.kind);
+				text += Kind_name(s.kind);
 				text += "[" + std::to_string(idx) + "]";
 				text += "[" + std::to_string(s.len) + "]$";
 				++idx;

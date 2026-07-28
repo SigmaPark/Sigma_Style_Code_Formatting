@@ -19,10 +19,45 @@
 #include "check.hpp"
 
 namespace fs = std::filesystem;
+
+namespace sak{
+	struct Line_range;
+	struct Raw_file;
+
+	static auto Read_lines(std::string const &path)->Lines;
+	static auto is_target_source(fs::path const &p)->bool;
+	static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<std::string>;
+	static auto Parse_line_range(std::string const &s, Line_range &out)->bool;
+	static auto Read_raw(std::string const &path, Raw_file &out)->bool;
+
+	static auto Check_file(
+		std::string const &path, Line_range const range, std::size_t &suspects
+	)->std::size_t;
+
+	static void Dump_classes(std::string const &path);
+	static auto Range_to_lo_hi(Line_range const range, int &lo, int &hi)->void;
+
+	static auto Edit_file(
+		std::string const &path, Line_range const range, bool const dry
+	)->std::size_t;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
+// 1-기준 [start, end] 라인 범위. 기본값은 파일 전체.
+struct sak::Line_range{
+	std::size_t start;
+	std::size_t end;
+};
+
+// 원문 바이트를 행 내용과 종결자로 갈라 담는다 — edit 이 개행 종류·마지막 개행을 그대로 보존한다.
+struct sak::Raw_file{
+	Lines contents;
+	std::vector<std::string> terms;
+};
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 // 파일을 행 단위로 읽는다(말미의 '\r' 는 제거).
-static auto Read_lines(std::string const &path)->Lines{
+auto sak::Read_lines(std::string const &path)->Lines{
 	Lines lines;
 
 	std::ifstream in(path);
@@ -40,7 +75,7 @@ static auto Read_lines(std::string const &path)->Lines{
 }
 
 // 검사 대상 확장자(.cpp .hpp .cu .cuh .h)를 가진 일반 파일인지 판별한다.
-static auto is_target_source(fs::path const &p)->bool{
+auto sak::is_target_source(fs::path const &p)->bool{
 	if( std::error_code ec; !fs::is_regular_file(p, ec) ){
 		return false;
 	}
@@ -56,7 +91,7 @@ static auto is_target_source(fs::path const &p)->bool{
 
 // dir 아래의 대상 소스 경로(검사용 전체 경로)를 모은다. recursive면 하위까지.
 // 출력은 사전식 정렬.
-static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<std::string>{
+auto sak::Collect_sources(fs::path const &dir, bool const recur)->std::list<std::string>{
 	std::list<std::string> out;
 
 	if(recur){
@@ -64,7 +99,7 @@ static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<st
 		std::error_code ec;
 
 		for( fs::recursive_directory_iterator it(dir, ec); it != end; ++it ){
-			if( ::is_target_source(it->path()) ){
+			if( is_target_source(it->path()) ){
 				out.emplace_back(it->path().generic_string());
 			}
 		}
@@ -74,7 +109,7 @@ static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<st
 		std::error_code ec;
 
 		for( fs::directory_iterator it(dir, ec); it != end; ++it ){
-			if( ::is_target_source(it->path()) ){
+			if( is_target_source(it->path()) ){
 				out.emplace_back(it->path().generic_string());
 			}
 		}
@@ -85,14 +120,8 @@ static auto Collect_sources(fs::path const &dir, bool const recur)->std::list<st
 	return out;
 }
 
-// 1-기준 [start, end] 라인 범위. 기본값은 파일 전체.
-struct Line_range{
-	std::size_t start;
-	std::size_t end;
-};
-
 // "a:b" / "a:" / ":b" 를 파싱한다. 성공 시 true. 양쪽 모두 1 이상이어야 하며 start <= end.
-static auto Parse_line_range(std::string const &s, Line_range &out)->bool{
+auto sak::Parse_line_range(std::string const &s, Line_range &out)->bool{
 	std::size_t const colon = s.find(':');
 
 	if(colon == std::string::npos){
@@ -153,15 +182,9 @@ static auto Parse_line_range(std::string const &s, Line_range &out)->bool{
 	return true;
 }
 
-// 원문 바이트를 행 내용과 종결자로 갈라 담는다 — edit 이 개행 종류·마지막 개행을 그대로 보존한다.
-struct Raw_file{
-	Lines contents;
-	std::vector<std::string> terms;
-};
-
 // 파일을 바이너리로 읽어 Raw_file 로 분해한다(내용은 Read_lines 와 동일하게 '\r' 를 뗀다).
 // 열기 실패면 false.
-static auto Read_raw(std::string const &path, Raw_file &out)->bool{
+auto sak::Read_raw(std::string const &path, Raw_file &out)->bool{
 	std::ifstream in(path, std::ios::binary);
 
 	if(!in){
@@ -201,12 +224,12 @@ static auto Read_raw(std::string const &path, Raw_file &out)->bool{
 
 // 한 파일을 검사해 위반을 출력하고, 위반 개수를 돌려준다. 범위 밖의 위반은 건너뛴다.
 // 용의는 [suspect] 로 함께 출력하되 반환값(=종료코드)에 넣지 않고 suspects 로만 센다.
-static auto Check_file(
+auto sak::Check_file(
 	std::string const &path, Line_range const range, std::size_t &suspects
 )->std::size_t{
 	Raw_file raw;
 
-	if( !::Read_raw(path, raw) ){
+	if( !Read_raw(path, raw) ){
 		std::cerr << "error: cannot read: " << path << "\n";
 
 		return 0;
@@ -214,8 +237,8 @@ static auto Check_file(
 
 	bool const final_nl = raw.terms.empty() || !raw.terms.back().empty();
 	Lines const &lines = raw.contents;
-	Seg_lines const segs = ::scan_lines(lines);
-	std::vector<Violation> const violations = ::check_lines(lines, segs, final_nl);
+	Seg_lines const segs = scan_lines(lines);
+	std::vector<Violation> const violations = check_lines(lines, segs, final_nl);
 
 	std::size_t hits = 0;
 
@@ -245,18 +268,18 @@ static auto Check_file(
 }
 
 // 검증용 — 표기 판정 스트림을 그대로 덤프한다(개발자 진단용 숨은 플래그).
-static void Dump_classes(std::string const &path){
-	Lines const lines = ::Read_lines(path);
-	Seg_lines const segs = ::scan_lines(lines);
+void sak::Dump_classes(std::string const &path){
+	Lines const lines = Read_lines(path);
+	Seg_lines const segs = scan_lines(lines);
 
-	for( std::string const &s : ::render_classes(lines, segs) ){
+	for( std::string const &s : render_classes(lines, segs) ){
 		std::cout << path << ":" << s << "\n";
 	}
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
 // range(1-기준 [start,end]) 를 edit_lines 용 0-기준 포함범위 [lo,hi] 로 바꾼다.
-static auto Range_to_lo_hi(Line_range const range, int &lo, int &hi)->void{
+auto sak::Range_to_lo_hi(Line_range const range, int &lo, int &hi)->void{
 	int const int_max = std::numeric_limits<int>::max();
 
 	lo = range.start > 1 ? static_cast<int>(range.start) - 1 : 0;
@@ -268,20 +291,20 @@ static auto Range_to_lo_hi(Line_range const range, int &lo, int &hi)->void{
 
 // 한 파일을 edit 한다. 자동교정·범위밖(manual) 기록을 출력하고, dry 가 아니면 원자적으로 쓴다.
 // 남은 manual 위반 개수를 돌려준다(종료코드용).
-static auto Edit_file(std::string const &path, Line_range const range, bool const dry)->std::size_t{
+auto sak::Edit_file(std::string const &path, Line_range const range, bool const dry)->std::size_t{
 	Raw_file raw;
 
-	if( !::Read_raw(path, raw) ){
+	if( !Read_raw(path, raw) ){
 		std::cerr << "error: cannot read: " << path << "\n";
 
 		return 0;
 	}
 
 	int lo = 0, hi = 0;
-	::Range_to_lo_hi(range, lo, hi);
+	Range_to_lo_hi(range, lo, hi);
 
 	bool const final_nl = raw.terms.empty() || !raw.terms.back().empty();
-	Edit_result const res = ::edit_lines(raw.contents, lo, hi, final_nl);
+	Edit_result const res = edit_lines(raw.contents, lo, hi, final_nl);
 
 	if(!res.ok){
 		std::cerr << path << ": edit aborted (regression gate failed); left unchanged\n";
@@ -373,7 +396,7 @@ auto main(int const argc, char const * const *argv)->int{
 	bool dry = false;
 	bool classes = false;
 
-	Line_range range{ 1, std::numeric_limits<std::size_t>::max() };
+	sak::Line_range range{ 1, std::numeric_limits<std::size_t>::max() };
 
 	std::string target;
 	bool parse_ok = true;
@@ -399,7 +422,7 @@ auto main(int const argc, char const * const *argv)->int{
 
 			++i;
 
-			if( !::Parse_line_range(args[i], range) ){
+			if( !sak::Parse_line_range(args[i], range) ){
 				std::cerr << "error: invalid -b range: " << args[i] << "\n";
 				parse_ok = false;
 				break;
@@ -452,18 +475,18 @@ auto main(int const argc, char const * const *argv)->int{
 		}
 
 		if(edit_mode){
-			return ::Edit_file(target, range, dry) == 0 ? 0 : 1;
+			return sak::Edit_file(target, range, dry) == 0 ? 0 : 1;
 		}
 
 		if(classes){
-			::Dump_classes(target);
+			sak::Dump_classes(target);
 
 			return 0;
 		}
 
 		std::size_t suspects = 0;
 
-		return ::Check_file(target, range, suspects) == 0 ? 0 : 1;
+		return sak::Check_file(target, range, suspects) == 0 ? 0 : 1;
 	}
 
 	if( std::error_code ec; fs::is_directory(path, ec) ){
@@ -476,8 +499,8 @@ auto main(int const argc, char const * const *argv)->int{
 		if(edit_mode){
 			std::size_t manual = 0, files = 0;
 
-			for( std::string const &f : ::Collect_sources(path, recur) ){
-				manual += ::Edit_file(f, range, dry);
+			for( std::string const &f : sak::Collect_sources(path, recur) ){
+				manual += sak::Edit_file(f, range, dry);
 				++files;
 			}
 
@@ -488,12 +511,12 @@ auto main(int const argc, char const * const *argv)->int{
 
 		std::size_t total = 0, files = 0, suspects = 0;
 
-		for( std::string const &f : ::Collect_sources(path, recur) ){
+		for( std::string const &f : sak::Collect_sources(path, recur) ){
 			if(classes){
-				::Dump_classes(f);
+				sak::Dump_classes(f);
 			}
 			else{
-				total += ::Check_file(f, range, suspects);
+				total += sak::Check_file(f, range, suspects);
 			}
 
 			++files;
