@@ -64,9 +64,9 @@ namespace sakt{
 	}
 
 	auto run_sak(Lines const &snippet, bool const final_newline)->std::vector<Violation>{
-		Seg_lines const segs = scan_lines(snippet);
+		sak::Seg_lines const segs = sak::scan_lines(snippet);
 
-		return check_lines(snippet, segs, final_newline);
+		return sak::check_lines(snippet, segs, final_newline);
 	}
 
 	auto expect_none()->std::vector<Expect>{

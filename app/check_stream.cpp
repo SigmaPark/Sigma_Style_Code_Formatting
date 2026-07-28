@@ -9,8 +9,30 @@
 #include <string>
 #include <vector>
 
+namespace sak{
+	struct Shield;
+
+	static auto Is_no_space_bidir(std::string const &t)->bool;
+	static auto Var_decl_close_semi(std::string const &m, int const from)->int;
+
+	static auto Build_shields(
+		Lines const &mask, std::vector<Adj_tok> const &toks,
+		std::vector<Bk_pair> const &pairs, std::vector<Angle_pair> const &angles
+	)->std::vector<Shield>;
+
+	static auto Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bool;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
+// 차폐 구간 — 단일행 괄호(가상 괄호 포함)의 안쪽. 그 안의 토큰은 하나의 피연산 토큰에 속하므로
+// 개행 우선순위를 갖지 않는다(§6.2).
+struct sak::Shield{
+	int row, lo, hi;
+};
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
 // 좌우 모두 붙여 쓰는 양방향 토큰(개행 우선순위가 산술 이항연산자보다 낮은 것들, §8.4).
-static auto Is_no_space_bidir(std::string const &t)->bool{
+auto sak::Is_no_space_bidir(std::string const &t)->bool{
 	return t == "::" || t == "." || t == "->" || t == ".*" || t == "->*";
 }
 
@@ -22,7 +44,7 @@ static auto Is_no_space_bidir(std::string const &t)->bool{
 //
 // 자동교정 힌트는 달지 않는다 — 이 자리의 공백은 분류를 싣는 신호여서, 기계가 그 유무를 뒤집는
 // 것은 서식 교정이 아니라 코드의 의미 선언을 바꾸는 일이다(신호 공백 불가침).
-void Check_adjudicated_space(
+void sak::Check_adjudicated_space(
 	std::vector<Adj_tok> const &toks, std::vector<Violation> &out
 ){
 	for(Adj_tok const &t : toks){
@@ -47,7 +69,7 @@ void Check_adjudicated_space(
 		}
 
 		if(t.cls == Adj_cls::bidir){
-			bool const tight = ::Is_no_space_bidir(t.text);
+			bool const tight = Is_no_space_bidir(t.text);
 
 			// §8.4 는 **단일행 상태**의 공백만 정한다. 무공백 양방향 토큰이 개행되면 §9.1 에
 			// 따라 넣은 공백이 유지되므로, 이웃이 다른 행에 있으면 그 쪽은 보지 않는다.
@@ -162,7 +184,7 @@ void Check_adjudicated_space(
 //
 // 세미콜론과 괄호(꺾쇠 포함)의 자리는 §5.4·§5.5 가 정하므로 여기서 보지 않는다.
 // 용의 위에 선 판정은 그 판정보다 확실할 수 없으므로 함께 용의로 내린다.
-void Check_break_form(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
+void sak::Check_break_form(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
 	int const n = static_cast<int>(toks.size());
 
 	for(int i = 0; i < n; ++i){
@@ -214,7 +236,7 @@ void Check_break_form(std::vector<Adj_tok> const &toks, std::vector<Violation> &
 		}
 
 		if(
-			t.cls == Adj_cls::bidir && line_first && ::Is_no_space_bidir(t.text)
+			t.cls == Adj_cls::bidir && line_first && Is_no_space_bidir(t.text)
 			&& !opens_vbracket
 			&& i + 1 < n && toks[i + 1].row == t.row && t.gr == 0
 		){
@@ -231,16 +253,10 @@ void Check_break_form(std::vector<Adj_tok> const &toks, std::vector<Violation> &
 	}
 }
 
-// 차폐 구간 — 단일행 괄호(가상 괄호 포함)의 안쪽. 그 안의 토큰은 하나의 피연산 토큰에 속하므로
-// 개행 우선순위를 갖지 않는다(§6.2).
-struct Shield{
-	int row, lo, hi;
-};
-
 // 다중행 타입의 닫는 행에서, 타입이 끝난 지점(from) 뒤가 단일행 변수 선언 가상 괄호(선언자
 // 나열 + 같은 행의 종결 `;`)이면 그 `;` 의 열을 돌려준다. 아니면 -1. 선언자 머리는 식별자와
 // `*`·`&`·`(` 만 인정하고, `;` 는 괄호 깊이 0 에서 찾는다.
-static auto Var_decl_close_semi(std::string const &m, int const from)->int{
+auto sak::Var_decl_close_semi(std::string const &m, int const from)->int{
 	int const n = static_cast<int>(m.size());
 	int i = from, ws = 0;
 
@@ -252,7 +268,7 @@ static auto Var_decl_close_semi(std::string const &m, int const from)->int{
 	bool const  
 		head
 		= ws != 0 && i < n
-		&& ( ::is_word_char(m[i]) || m[i] == '*' || m[i] == '&' || m[i] == '(' )
+		&& ( is_word_char(m[i]) || m[i] == '*' || m[i] == '&' || m[i] == '(' )
 	;
 
 	if(!head){
@@ -282,7 +298,7 @@ static auto Var_decl_close_semi(std::string const &m, int const from)->int{
 
 // §6.2 — 단일행 괄호(실괄호·가상 괄호)의 안은 통째로 하나의 피연산 토큰이라 개행 경쟁에
 // 노출되지 않는다. 경쟁 판정이 보지 말아야 할 안쪽 구간들을 차폐면으로 모은다.
-static auto Build_shields(
+auto sak::Build_shields(
 	Lines const &mask, std::vector<Adj_tok> const &toks,
 	std::vector<Bk_pair> const &pairs, std::vector<Angle_pair> const &angles
 )->std::vector<Shield>{
@@ -305,8 +321,8 @@ static auto Build_shields(
 	// 행의 종결 `;` 까지가 하나의 피연산 토큰이다. 안의 구분자·초기화자는 경쟁에 노출되지
 	// 않는다.
 	for(Bk_pair const &p : pairs){
-		if( p.o_row != p.c_row && ::Is_inline_type_close(mask, p) ){
-			int const semi = ::Var_decl_close_semi(mask[p.c_row], p.c_col + p.c_len);
+		if( p.o_row != p.c_row && Is_inline_type_close(mask, p) ){
+			int const semi = Var_decl_close_semi(mask[p.c_row], p.c_col + p.c_len);
 
 			if(semi >= 0){
 				shields.push_back({ p.c_row, p.c_col, semi });
@@ -321,13 +337,13 @@ static auto Build_shields(
 			continue;
 		}
 
-		int const chain = ::Angle_chain_end(mask[a.c_row], a.c_col + 1);
+		int const chain = Angle_chain_end(mask[a.c_row], a.c_col + 1);
 
 		if(chain < 0){
 			continue;
 		}
 
-		int const semi = ::Var_decl_close_semi(mask[a.c_row], chain);
+		int const semi = Var_decl_close_semi(mask[a.c_row], chain);
 
 		if(semi >= 0){
 			shields.push_back({ a.c_row, a.c_col, semi });
@@ -363,7 +379,7 @@ static auto Build_shields(
 // 단일행 괄호 안은 통째로 하나의 피연산 토큰이라(§6.2) 경쟁에 노출되지 않는다 — 생성자
 // 멤버초기화 리스트·상속 리스트·변수 선언문처럼 단일행 가상 괄호를 이루는 자리도
 // 마찬가지다(§5.5).
-void Check_break_competition(
+void sak::Check_break_competition(
 	Lines const &mask, std::vector<Adj_tok> const &toks,
 	std::vector<Bk_pair> const &pairs, std::vector<Angle_pair> const &angles,
 	std::vector<Violation> &out
@@ -374,7 +390,7 @@ void Check_break_competition(
 		return;
 	}
 
-	std::vector<Shield> const shields = ::Build_shields(mask, toks, pairs, angles);
+	std::vector<Shield> const shields = Build_shields(mask, toks, pairs, angles);
 
 	auto const  
 		shielded
@@ -570,7 +586,7 @@ void Check_break_competition(
 //   · 경쟁자가 없으면 적법한 ▽ 개행 — 침묵한다.
 //   · 사이에 공행이 끼었거나 들여쓰기가 어긋난 형태(전개 변수선언 후보)는 표기만으로 못
 //     가린다 — 종전대로 용의로 지목한다.
-void Check_word_paren_vop(
+void sak::Check_word_paren_vop(
 	Lines const &lines, Lines const &mask, std::vector<Adj_tok> const &toks,
 	std::vector<Bk_pair> const &pairs, std::vector<Angle_pair> const &angles,
 	std::vector<Violation> &out
@@ -580,35 +596,35 @@ void Check_word_paren_vop(
 		n = static_cast<int>(toks.size())
 	;
 
-	std::vector<Shield> const shields = ::Build_shields(mask, toks, pairs, angles);
+	std::vector<Shield> const shields = Build_shields(mask, toks, pairs, angles);
 
 	for(int r = 0; r < rows; ++r){
-		int const l = ::Last_significant_col(mask[r]);
+		int const l = Last_significant_col(mask[r]);
 
 		if(l < 0 || mask[r][l] != ')'){
 			continue;
 		}
 
 		bool crossed = false;
-		int const nr = ::Next_code_row_over_blanks(lines, mask, r, crossed);
+		int const nr = Next_code_row_over_blanks(lines, mask, r, crossed);
 
 		if(nr < 0){
 			continue;
 		}
 
-		int const nc = ::First_significant_col(mask[nr]);
+		int const nc = First_significant_col(mask[nr]);
 
-		if( nc < 0 || !::is_word_char(mask[nr][nc]) ){
+		if( nc < 0 || !is_word_char(mask[nr][nc]) ){
 			continue;
 		}
 
 		int pr = r, pc = l;
 
-		if( ::Match_bracket_back(mask, '(', ')', pr, pc) && pr != r ){
+		if( Match_bracket_back(mask, '(', ')', pr, pc) && pr != r ){
 			continue;
 		}
 
-		if( crossed || ::Indent_depth(lines[nr]) != ::Indent_depth(lines[r]) ){
+		if( crossed || Indent_depth(lines[nr]) != Indent_depth(lines[r]) ){
 			out.push_back(
 				{
 					nr, nc, "4.3",
@@ -691,7 +707,7 @@ void Check_word_paren_vop(
 // §9.4 잔여 — 다중행 기호형 토큰이 형성한 개행 경쟁 범위에 인접한 위·아래 행은 공행이어야 하고,
 // 그 범위 안에는 공행이 있을 수 없다. 다중행 괄호 쪽은 Check_bracket_blank_line 이 맡으므로,
 // 여기서는 괄호와 세미콜론을 뺀 나머지 토큰(곧 다중행 이항 연산자)이 만든 범위만 본다.
-void Check_operator_blank_line(
+void sak::Check_operator_blank_line(
 	Lines const &lines, Lines const &mask, std::vector<Adj_tok> const &toks,
 	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 ){
@@ -733,7 +749,7 @@ void Check_operator_blank_line(
 
 		if(i > 0 && toks[i - 1].row != t.row){
 			for(int r = toks[i - 1].row + 1; r < t.row; ++r){
-				if( ::Is_blank_row(lines[r]) ){
+				if( Is_blank_row(lines[r]) ){
 					out.push_back(
 						{ r, 0, "9.4", "blank line inside a break-competition range" }
 					);
@@ -772,13 +788,13 @@ void Check_operator_blank_line(
 
 			bool const  
 				collides
-				= !::Is_blank_row(lines[nr]) && ::Has_code(mask[nr])
-				&& ::Indent_depth(lines[nr]) == ::Indent_depth(lines[lo])
+				= !Is_blank_row(lines[nr]) && Has_code(mask[nr])
+				&& Indent_depth(lines[nr]) == Indent_depth(lines[lo])
 				&& (
-					::Last_code_char(mask[nr]) == ';'
-					|| ::Last_code_char(mask[nr]) == '}'
+					Last_code_char(mask[nr]) == ';'
+					|| Last_code_char(mask[nr]) == '}'
 				)
-				&& !::Continues_statement(mask[lo], false)
+				&& !Continues_statement(mask[lo], false)
 			;
 
 			if(collides){
@@ -793,10 +809,10 @@ void Check_operator_blank_line(
 
 			bool const  
 				collides
-				= !::Is_blank_row(lines[nr]) && ::Has_code(mask[nr])
-				&& ::Indent_depth(lines[nr]) == ::Indent_depth(lines[hi])
-				&& ::Last_code_char(mask[hi]) == ';'
-				&& !::Continues_statement(mask[nr], true)
+				= !Is_blank_row(lines[nr]) && Has_code(mask[nr])
+				&& Indent_depth(lines[nr]) == Indent_depth(lines[hi])
+				&& Last_code_char(mask[hi]) == ';'
+				&& !Continues_statement(mask[nr], true)
 			;
 
 			if(collides){
@@ -811,7 +827,7 @@ void Check_operator_blank_line(
 // §3 단항 연산자 병기 — 첫 부호가 단항으로 판정되면 그 뒤에 같은 부호가 이어질 수 없다.
 // 이중 부정은 `- -x` 가 아니라 `-(-x)` 다. 문맥 불변 자리는 Check_unary_juxtaposition 이 이미
 // 보므로, 여기서는 판정이 있어야만 보이는 자리(앞이 키워드인 경우 등)를 마저 본다.
-void Check_unary_pair(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
+void sak::Check_unary_pair(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
 	int const n = static_cast<int>(toks.size());
 
 	for(int i = 0; i + 1 < n; ++i){
@@ -834,7 +850,7 @@ void Check_unary_pair(std::vector<Adj_tok> const &toks, std::vector<Violation> &
 // §3 키워드 위치 — `const`·`volatile`·`constexpr` 은 언제나 수식할 대상의 **뒤**에 온다.
 // 그러므로 이 키워드들의 왼쪽에는 반드시 수식받는 대상(타입 이름·`*`·닫는 괄호)이 있어야 한다.
 // 왼쪽이 문장 경계이거나 `static`·`inline` 같은 앞쪽 한정자면, 그 키워드는 앞에 놓인 것이다.
-void Check_qualifier_prefix(
+void sak::Check_qualifier_prefix(
 	std::vector<Adj_tok> const &toks, std::vector<Violation> &out
 ){
 	static char const * const  
@@ -900,7 +916,7 @@ void Check_qualifier_prefix(
 // 두 행 사이의 순수 공행은 건너서 본다 — 공행은 발생원이 아니라 인가된 자리에 쌓인 형상(§9.4)
 // 이므로, 공행을 끼워도 무허가 개행은 합법이 되지 않는다. 공행 판정은 raw 행으로 한다(컷마스크
 // 에서는 주석 전용 행이 잘려 공백행처럼 보이기 때문).
-void Check_unmarked_wrap(
+void sak::Check_unmarked_wrap(
 	Lines const &lines, Lines const &cut_lines, Lines const &cut_mask,
 	std::vector<Violation> &out
 ){
@@ -914,12 +930,12 @@ void Check_unmarked_wrap(
 	for(int r = 0; r < rows; ++r){
 		std::string const &a = cut_mask[r];
 
-		if( !::Has_code(a) ){
+		if( !Has_code(a) ){
 			continue;
 		}
 
 		bool crossed = false;
-		int const nr = ::Next_code_row_over_blanks(lines, cut_mask, r, crossed);
+		int const nr = Next_code_row_over_blanks(lines, cut_mask, r, crossed);
 
 		if(nr < 0){
 			continue;
@@ -928,8 +944,8 @@ void Check_unmarked_wrap(
 		std::string const &b = cut_mask[nr];
 
 		int const  
-			a_end = ::Last_significant_col(a),
-			b_beg = ::First_significant_col(b)
+			a_end = Last_significant_col(a),
+			b_beg = First_significant_col(b)
 		;
 
 		if(a_end < 0 || b_beg < 0){
@@ -938,8 +954,8 @@ void Check_unmarked_wrap(
 
 		bool const  
 			word_pair
-			= ::is_word_char(a[a_end])
-			&& ::is_word_char(b[b_beg]) && !std::isdigit( static_cast<unsigned char>(b[b_beg]) )
+			= is_word_char(a[a_end])
+			&& is_word_char(b[b_beg]) && !std::isdigit( static_cast<unsigned char>(b[b_beg]) )
 		;
 
 		if(!word_pair){
@@ -947,7 +963,7 @@ void Check_unmarked_wrap(
 		}
 
 		// 앞 행을 끝맺은 단어를 떠 본다 — 가상 괄호를 여는 키워드면 적법하다.
-		std::string const last_word = ::Word_ending_at(a, a_end);
+		std::string const last_word = Word_ending_at(a, a_end);
 		bool opener = false;
 
 		for(char const * const w : Openers){
@@ -961,7 +977,7 @@ void Check_unmarked_wrap(
 		}
 
 		// §5.5 2칸 마커 — 주석을 걷어낸 행의 꼬리에 정확히 2칸.
-		if( ::Tail_spaces(cut_lines[r]) == 2 ){
+		if( Tail_spaces(cut_lines[r]) == 2 ){
 			continue;
 		}
 
@@ -995,7 +1011,7 @@ void Check_unmarked_wrap(
 // 빼는 자리 셋: ① 함수 기본설정·삭제·순수가상(`auto f() const` `= default;`) — 마지막 단어 앞이
 // 닫는 괄호라 술어가 저절로 비켜간다. ② 템플릿 기본 인자·함수 기본 매개변수 — 표현식 괄호 안이라
 // 아래 가드로 걸러진다. ③ C++20 `concept` — 규약이 아직 다루지 않는다.
-void Check_glued_declarator(
+void sak::Check_glued_declarator(
 	Lines const &cut_lines, std::vector<Adj_tok> const &toks,
 	std::vector<Bk_pair> const &pairs, std::vector<Angle_pair> const &angles,
 	std::vector<Violation> &out
@@ -1086,7 +1102,7 @@ void Check_glued_declarator(
 		}
 
 		// 2칸 마커가 있으면 이 행은 타입 표현이 끝나는 행이다 — 여기 걸릴 일이 없다.
-		if( ::Tail_spaces(cut_lines[r]) == 2 ){
+		if( Tail_spaces(cut_lines[r]) == 2 ){
 			continue;
 		}
 
@@ -1105,10 +1121,10 @@ void Check_glued_declarator(
 // 링키지 블록)인지 — 그 안의 행들은 괄호의 이음줄이 아니라 문장들이라, 인접 문자열 리터럴의
 // 개행을 면허하는 "다중행 괄호 안"이 아니다. 판정이 서지 않는 여는 자리(중괄호 초기화 `Foo{`,
 // `]`·`>` 뒤 등)는 false 로 두어 보수적으로 면허한다(위양성 0 우선 — 거짓 음성 수용).
-static auto Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bool{
+auto sak::Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bool{
 	int r = p.o_row, c = p.o_col - 1;
 
-	if( !::Prev_significant(mask, r, c) ){
+	if( !Prev_significant(mask, r, c) ){
 		return true; // 파일 첫머리의 나체 블록
 	}
 
@@ -1118,11 +1134,11 @@ static auto Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bo
 		return true; // 함수·제어문·람다 본체
 	}
 
-	if( !::is_word_char(ch) ){
+	if( !is_word_char(ch) ){
 		return false; // `=`·`,`·`(`·`>`·`:`·`]` 등 — 초기화·표현식 문맥으로 보수 분류
 	}
 
-	std::string const w = ::Word_ending_at(mask[r], c);
+	std::string const w = Word_ending_at(mask[r], c);
 	int const s = c - static_cast<int>(w.size());
 
 	bool const  
@@ -1135,7 +1151,7 @@ static auto Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bo
 		return true;
 	}
 
-	std::string const before = ::Word_before(mask, r, s + 1);
+	std::string const before = Word_before(mask, r, s + 1);
 
 	return
 		before == "struct" || before == "class" || before == "union" || before == "enum"
@@ -1150,7 +1166,7 @@ static auto Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bo
 // 머리까지 거슬러 올라 그 흔적 — 여는 키워드(return 등)·변수 선언문의 2칸 마커 — 이 보이면
 // 보수적으로 침묵한다. 원시 문자열·문자 리터럴·사이에 주석·공행이 낀 자리도 침묵(sak_coverage).
 // 접합 자리의 우선순위는 Prio::str_adj(§6.1 ◆) — §9.2 경쟁 통합은 커버리지 밖.
-void Check_string_splice_newline(
+void sak::Check_string_splice_newline(
 	Lines const &mask, Lines const &cut_lines, Seg_lines const &segs,
 	std::vector<Adj_tok> const &toks, std::vector<Bk_pair> const &pairs,
 	std::vector<Angle_pair> const &angles, std::vector<Violation> &out
@@ -1196,7 +1212,7 @@ void Check_string_splice_newline(
 				return false;
 			}
 
-			return ::Tail_spaces(cut_lines[row]) == 2;
+			return Tail_spaces(cut_lines[row]) == 2;
 		}
 	;
 
@@ -1226,7 +1242,7 @@ void Check_string_splice_newline(
 				&& ( p.c_row > b.row || (p.c_row == b.row && p.c_col > b.col + b.len - 1) )
 			;
 
-			if(  contains && ( p.kind != '{' || !::Brace_opens_statement_scope(mask, p) )  ){
+			if(  contains && ( p.kind != '{' || !Brace_opens_statement_scope(mask, p) )  ){
 				licensed = true;
 
 				break;
@@ -1312,26 +1328,26 @@ void Check_string_splice_newline(
 // §9.3 — `}` 로 끝난 행 다음 코드 행이 `(`·`[` 로 시작하는 자리. IIFE 의 호출 괄호가 절단된
 // 것이면 위반(부착 자리 — §4.2 틈 조건)이고, 괄호문(`(*fp)();`)·람다문 같은 새 문장의 머리면
 // 적법하다. 렉서 수준에서는 갈리지 않아 용의로만 지목한다(속성 `[[` 는 제외 — 적법한 머리).
-void Check_brace_paren_newline(
+void sak::Check_brace_paren_newline(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(mask.size());
 
 	for(int r = 0; r < rows; ++r){
-		int const l = ::Last_significant_col(mask[r]);
+		int const l = Last_significant_col(mask[r]);
 
 		if(l < 0 || mask[r][l] != '}'){
 			continue;
 		}
 
 		bool crossed = false;
-		int const nr = ::Next_code_row_over_blanks(lines, mask, r, crossed);
+		int const nr = Next_code_row_over_blanks(lines, mask, r, crossed);
 
 		if(nr < 0){
 			continue;
 		}
 
-		int const nc = ::First_significant_col(mask[nr]);
+		int const nc = First_significant_col(mask[nr]);
 
 		if(nc < 0){
 			continue;
@@ -1366,7 +1382,7 @@ void Check_brace_paren_newline(
 }
 
 // 충돌 사각 — 확정 위반이 아니라 용의로 지목해 사람의 판정에 넘긴다.
-void Check_suspects(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
+void sak::Check_suspects(std::vector<Adj_tok> const &toks, std::vector<Violation> &out){
 	for(Adj_tok const &t : toks){
 		if(!t.suspect){
 			continue;

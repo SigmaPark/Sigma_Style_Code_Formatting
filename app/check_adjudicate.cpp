@@ -10,6 +10,25 @@
 #include <string>
 #include <vector>
 
+namespace sak{
+	static auto Prio_of_bidir(std::string const &text)->Prio;
+	static auto Prio_of(std::string const &text, Adj_cls const cls)->Prio;
+	static auto Lex_to_adj(Tk_cls const lex, std::string const &text)->Adj_cls;
+	static auto Is_preproc_row(Seg_lines const &segs, int const row)->bool;
+	static auto Is_literal_seg(Seg_kind const kind)->bool;
+	static auto Is_keyword(std::string const &w)->bool;
+	static auto Is_unary_prefix(std::string const &t)->bool;
+
+	static void Mark_suspects(
+		std::vector<Adj_tok> &toks, std::vector<int> const &el, std::vector<int> const &er,
+		std::vector<int> const &dep
+	);
+
+	static auto Adj_name(Adj_cls const cls)->char const *;
+	static auto Prio_name(Prio const prio)->char const *;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
 // §5.7 템플릿 헤더의 닫는 꺾쇠 뒤에는 단일행·다중행을 불문하고 반드시 개행을 둔다.
 // 여는 `<` 바로 앞이 `template` 단어인 짝만 헤더로 보고, 닫는 `>` 가 그 행의 마지막 의미
 // 토큰인지 검사한다(행끝 주석은 §2 제외 대상이라 마스크에서 `@` — 마지막 토큰 판정에 무해).
@@ -23,7 +42,7 @@
 // 이 구역은 스트림만 만든다. 실제 판정(표기 판정 술어)은 Adjudicate_tokens 의 몫이다.
 
 // 양방향으로 판정된 기호형 토큰의 §6.1 우선순위.
-static auto Prio_of_bidir(std::string const &text)->Prio{
+auto sak::Prio_of_bidir(std::string const &text)->Prio{
 	struct Entry{
 		char const *text;
 		Prio prio;
@@ -61,7 +80,7 @@ static auto Prio_of_bidir(std::string const &text)->Prio{
 }
 
 // 토큰의 §6.1 우선순위. 단방향·피연산·비기호형은 개행 대상이 아니라 우선순위가 없다.
-static auto Prio_of(std::string const &text, Adj_cls const cls)->Prio{
+auto sak::Prio_of(std::string const &text, Adj_cls const cls)->Prio{
 	if(cls == Adj_cls::semi){
 		return Prio::semi;
 	}
@@ -75,7 +94,7 @@ static auto Prio_of(std::string const &text, Adj_cls const cls)->Prio{
 	}
 
 	if(cls == Adj_cls::bidir){
-		return ::Prio_of_bidir(text);
+		return Prio_of_bidir(text);
 	}
 
 	return Prio::none;
@@ -83,7 +102,7 @@ static auto Prio_of(std::string const &text, Adj_cls const cls)->Prio{
 
 // Tok_8_3 의 모양 분류를 §4 분류로 옮긴다. 모양만으로 갈리지 않는 글리프(skip)는 unresolved 로
 // 남겨 Adjudicate_tokens 에 넘긴다.
-static auto Lex_to_adj(Tk_cls const lex, std::string const &text)->Adj_cls{
+auto sak::Lex_to_adj(Tk_cls const lex, std::string const &text)->Adj_cls{
 	switch(lex){
 	case Tk_cls::word:
 		return Adj_cls::word;
@@ -110,7 +129,7 @@ static auto Lex_to_adj(Tk_cls const lex, std::string const &text)->Adj_cls{
 }
 
 // 그 행이 전처리행(§2 제외 대상)인가.
-static auto Is_preproc_row(Seg_lines const &segs, int const row)->bool{
+auto sak::Is_preproc_row(Seg_lines const &segs, int const row)->bool{
 	if( row >= static_cast<int>(segs.size()) ){
 		return false;
 	}
@@ -125,7 +144,7 @@ static auto Is_preproc_row(Seg_lines const &segs, int const row)->bool{
 }
 
 // 그 세그먼트가 피연산자로 서는 리터럴인가.
-static auto Is_literal_seg(Seg_kind const kind)->bool{
+auto sak::Is_literal_seg(Seg_kind const kind)->bool{
 	return
 		kind == Seg_kind::string_lit || kind == Seg_kind::char_lit
 		|| kind == Seg_kind::raw_string
@@ -133,31 +152,31 @@ static auto Is_literal_seg(Seg_kind const kind)->bool{
 }
 
 // 파일 전체를 표기 판정용 토큰열로 만든다(행 순서·열 순서). 전처리행은 통째로 뺀다.
-auto Tokenize_file(Lines const &mask, Seg_lines const &segs)->std::vector<Adj_tok>{
+auto sak::Tokenize_file(Lines const &mask, Seg_lines const &segs)->std::vector<Adj_tok>{
 	std::vector<Adj_tok> out;
 	int const rows = static_cast<int>(mask.size());
 
 	for(int r = 0; r < rows; ++r){
-		if( ::Is_preproc_row(segs, r) ){
+		if( Is_preproc_row(segs, r) ){
 			continue;
 		}
 
 		std::vector<Adj_tok> row_toks;
 
-		for( Tok_8_3 const &t : ::Tokenize_8_3(mask[r]) ){
-			std::string const text = ::Slice(mask[r], t.col, t.len);
+		for( Tok_8_3 const &t : Tokenize_8_3(mask[r]) ){
+			std::string const text = Slice(mask[r], t.col, t.len);
 
 			row_toks.push_back(
 				{
 					r, t.col, t.len, text, t.cls,
-					::Lex_to_adj(t.cls, text), Prio::none, false, -1, -1, -1, -1
+					Lex_to_adj(t.cls, text), Prio::none, false, -1, -1, -1, -1
 				}
 			);
 		}
 
 		if( r < static_cast<int>(segs.size()) ){
 			for(Segment const &s : segs[r]){
-				if( !::Is_literal_seg(s.kind) ){
+				if( !Is_literal_seg(s.kind) ){
 					continue;
 				}
 
@@ -178,7 +197,7 @@ auto Tokenize_file(Lines const &mask, Seg_lines const &segs)->std::vector<Adj_to
 		);
 
 		for(Adj_tok &t : row_toks){
-			t.prio = ::Prio_of(t.text, t.cls);
+			t.prio = Prio_of(t.text, t.cls);
 		}
 
 		out.insert(out.end(), row_toks.begin(), row_toks.end());
@@ -188,7 +207,7 @@ auto Tokenize_file(Lines const &mask, Seg_lines const &segs)->std::vector<Adj_to
 }
 
 // 키워드는 피연산자 꼬리·머리가 아니다. 피연산자로 서는 true·false·nullptr·this 는 뺀다.
-static auto Is_keyword(std::string const &w)->bool{
+auto sak::Is_keyword(std::string const &w)->bool{
 	static char const * const  
 		Words[]
 		= {
@@ -216,7 +235,7 @@ static auto Is_keyword(std::string const &w)->bool{
 }
 
 // 단항으로 표현식을 열 수 있는 기호형 토큰인가 — 피연산자 머리 판정에 쓴다.
-static auto Is_unary_prefix(std::string const &t)->bool{
+auto sak::Is_unary_prefix(std::string const &t)->bool{
 	return
 		t == "*" || t == "&" || t == "&&" || t == "+" || t == "-"
 		|| t == "!" || t == "~" || t == "++" || t == "--" || t == "..."
@@ -228,7 +247,7 @@ static auto Is_unary_prefix(std::string const &t)->bool{
 //   (1)(2) 선언이 올 수 있는 자리의 `단어 * 단어` — 잘못 띄어 쓴 선언과 옳게 쓴 연산이 동형.
 //   (3) `단어 < 단어 > 단어` — 잘못 벌려 쓴 인스턴스화와 옳게 쓴 비교 연쇄가 동형.
 //   (4) 뒤에 떨어진 선언 대상이 오는 피연산 데코레이터 — 잘못 띄어 쓴 선언일 수 있다.
-static void Mark_suspects(
+void sak::Mark_suspects(
 	std::vector<Adj_tok> &toks, std::vector<int> const &el, std::vector<int> const &er,
 	std::vector<int> const &dep
 ){
@@ -260,7 +279,7 @@ static void Mark_suspects(
 		= [&toks](int const e)->bool{
 			return
 				e > 0 && toks[e].text == "(" && toks[e - 1].cls == Adj_cls::word
-				&& !::Is_keyword(toks[e - 1].text)
+				&& !Is_keyword(toks[e - 1].text)
 			;
 		}
 	;
@@ -271,13 +290,13 @@ static void Mark_suspects(
 		bool const  
 			word_l
 			= el[i] >= 0 && toks[ el[i] ].cls == Adj_cls::word
-			&& !::Is_keyword(toks[ el[i] ].text)
+			&& !Is_keyword(toks[ el[i] ].text)
 		;
 
 		bool const  
 			word_r
 			= er[i] >= 0 && toks[ er[i] ].cls == Adj_cls::word
-			&& !::Is_keyword(toks[ er[i] ].text)
+			&& !Is_keyword(toks[ er[i] ].text)
 		;
 
 		// (1)(2) — 양방향으로 판정된 `* & &&` 인데, 그 자리가 선언이 시작될 수 있는 자리다.
@@ -330,7 +349,7 @@ static void Mark_suspects(
 			if(
 				j + 1 < n && dep[j] == dep[i]
 				&& toks[j].cls == Adj_cls::bidir && toks[j].text == ">"
-				&& toks[j + 1].cls == Adj_cls::word && !::Is_keyword(toks[j + 1].text)
+				&& toks[j + 1].cls == Adj_cls::word && !Is_keyword(toks[j + 1].text)
 			){
 				t.suspect = true;
 				toks[j].suspect = true;
@@ -341,7 +360,7 @@ static void Mark_suspects(
 
 // 표기 판정 — 표기(좌우 공백의 유무와 인접 토큰)로 문맥 의존 글리프의 §4 분류를 확정한다.
 // 어느 분류의 합법 표기와도 맞지 않는 자리는 unresolved 로 남는다(§8.4 위반 — S3 이 발화).
-void Adjudicate_tokens(std::vector<Adj_tok> &toks){
+void sak::Adjudicate_tokens(std::vector<Adj_tok> &toks){
 	int const n = static_cast<int>(toks.size());
 
 	if(n == 0){
@@ -388,12 +407,12 @@ void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 			Adj_tok const &t = toks[j];
 
 			if(t.cls == Adj_cls::word){
-				return !::Is_keyword(t.text);
+				return !Is_keyword(t.text);
 			}
 
 			return
 				t.cls == Adj_cls::lit || t.cls == Adj_cls::open_b
-				|| ::Is_unary_prefix(t.text) || t.text == "::"
+				|| Is_unary_prefix(t.text) || t.text == "::"
 			;
 		}
 	;
@@ -595,12 +614,12 @@ void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 		tail[i]
 		= t.cls == Adj_cls::lit || t.cls == Adj_cls::close_b
 		|| t.cls == Adj_cls::operand_like || t.cls == Adj_cls::angle_close
-		|| ( t.cls == Adj_cls::word && !::Is_keyword(t.text) )
+		|| ( t.cls == Adj_cls::word && !Is_keyword(t.text) )
 		|| postfix;
 	}
 
 	flush(0);
-	::Mark_suspects(toks, el, er, dep);
+	Mark_suspects(toks, el, er, dep);
 
 	for(int i = 0; i < n; ++i){
 		Adj_tok &t = toks[i];
@@ -612,7 +631,7 @@ void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 
 		t.prio
 		= t.cls == Adj_cls::angle_open || t.cls == Adj_cls::angle_close ? Prio::bracket
-		: ::Prio_of(t.text, t.cls);
+		: Prio_of(t.text, t.cls);
 	}
 }
 
@@ -627,7 +646,7 @@ void Adjudicate_tokens(std::vector<Adj_tok> &toks){
 //
 // 괄호 안에 든 꺾쇠도 스택이 그대로 세므로(레거시 역스캔은 `(...)` 를 통째로 건너뛰었다),
 // §8.5 의 중첩 단계도 이제 정확하다.
-auto Adjudicated_angles(std::vector<Adj_tok> const &toks)->std::vector<Angle_pair>{
+auto sak::Adjudicated_angles(std::vector<Adj_tok> const &toks)->std::vector<Angle_pair>{
 	std::vector<Angle_pair> out;
 	std::vector<int> stack;
 	int const n = static_cast<int>(toks.size());
@@ -651,7 +670,7 @@ auto Adjudicated_angles(std::vector<Adj_tok> const &toks)->std::vector<Angle_pai
 }
 
 // 덤프용 이름표.
-static auto Adj_name(Adj_cls const cls)->char const *{
+auto sak::Adj_name(Adj_cls const cls)->char const *{
 	switch(cls){
 	case Adj_cls::word:
 		return "word";
@@ -691,7 +710,7 @@ static auto Adj_name(Adj_cls const cls)->char const *{
 	}
 }
 
-static auto Prio_name(Prio const prio)->char const *{
+auto sak::Prio_name(Prio const prio)->char const *{
 	static char const * const  
 		Names[]
 		= {
@@ -708,17 +727,17 @@ static auto Prio_name(Prio const prio)->char const *{
 	return Names[static_cast<int>(prio)];
 }
 
-auto render_classes(Lines const &lines, Seg_lines const &segs)->Lines{
-	Lines const mask = ::render_mask(lines, segs);
-	std::vector<Adj_tok> toks = ::Tokenize_file(mask, segs);
-	::Adjudicate_tokens(toks);
+auto sak::render_classes(Lines const &lines, Seg_lines const &segs)->Lines{
+	Lines const mask = render_mask(lines, segs);
+	std::vector<Adj_tok> toks = Tokenize_file(mask, segs);
+	Adjudicate_tokens(toks);
 	Lines out;
 
 	for(Adj_tok const &t : toks){
 		std::string s = std::to_string(t.row + 1) + ":" + std::to_string(t.col + 1) + " ";
-		s += ::Adj_name(t.cls);
+		s += Adj_name(t.cls);
 		s += " ";
-		s += ::Prio_name(t.prio);
+		s += Prio_name(t.prio);
 		s += " ";
 		s += t.cls == Adj_cls::lit ? std::string("<lit>") : t.text;
 

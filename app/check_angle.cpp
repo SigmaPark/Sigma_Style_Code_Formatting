@@ -10,16 +10,25 @@
 #include <string>
 #include <vector>
 
+namespace sak{
+	static auto Is_closer_signal(Lines const &mask, int const row, int const col)->bool;
+
+	static auto Glued_declarator_tail(
+		std::string const &m, int const from, bool const decor_head
+	)->bool;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
 // §9.4 — 다중행 꺾쇠도 다중행 괄호와 같은 공행 봉투를 요구한다(§5 서두 — 꺾쇠도 괄호류).
-void Check_angle_blank_line(
+void sak::Check_angle_blank_line(
 	Lines const &lines, Lines const &mask, Angle_pair const &a, std::vector<Violation> &out
 ){
-	::Check_close_open_blank_line(lines, mask, a.o_row, a.c_row, a.c_col, 1, '<', out);
+	Check_close_open_blank_line(lines, mask, a.o_row, a.c_row, a.c_col, 1, '<', out);
 }
 
 // Angle_pair 벡터를 위치 기준으로 정렬해 완전히 동일한 중복 쌍을 제거한다(여러 매처의
 // 결과를 병합할 때·중첩 template 안 static_cast 가 두 번 잡히는 자리를 정리).
-void Dedup_angles(std::vector<Angle_pair> &v){
+void sak::Dedup_angles(std::vector<Angle_pair> &v){
 	std::sort(
 		v.begin(), v.end(),
 		[](Angle_pair const &a, Angle_pair const &b)->bool{
@@ -56,7 +65,7 @@ void Dedup_angles(std::vector<Angle_pair> &v){
 // template/static_cast/dynamic_cast/const_cast/reinterpret_cast 뒤 `<` 부터 짝 `>` 를
 // depth 추적으로 찾는다. `>>` 는 두 개의 close 이벤트로 분해해 각각 pair 를 방출.
 // `(...)` `[...]` 내부는 통째로 skip (내부 표현식에서 나체 `<`/`>` 는 안전).
-auto Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pair>{
+auto sak::Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pair>{
 	std::vector<Angle_pair> out;
 	int const rows = static_cast<int>(mask.size());
 
@@ -66,13 +75,13 @@ auto Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pair>{
 		int c = 0;
 
 		while(c < n){
-			if( !::Word_starts_at(m, c) ){
+			if( !Word_starts_at(m, c) ){
 				++c;
 
 				continue;
 			}
 
-			std::string const w = ::Word_at(m, c);
+			std::string const w = Word_at(m, c);
 			int const e = c + static_cast<int>(w.size());
 
 			bool const  
@@ -126,8 +135,8 @@ auto Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pair>{
 						break;
 					}
 
-					if( ::is_word_char(ch) ){
-						while( p_c < row_n && ::is_word_char(row_m[p_c]) ){
+					if( is_word_char(ch) ){
+						while( p_c < row_n && is_word_char(row_m[p_c]) ){
 							++p_c;
 						}
 
@@ -319,14 +328,14 @@ auto Match_template_cast_angles(Lines const &mask)->std::vector<Angle_pair>{
 	}
 
 	// 중복 제거 (중첩 template 안의 static_cast 등이 두 번 잡히는 자리 처리).
-	::Dedup_angles(out);
+	Dedup_angles(out);
 
 	return out;
 }
 
 // `>` 뒤 첫 의미 토큰이 "표현식을 시작할 수 없는 토큰"(닫힘 신호)인지 판정한다. 이런
 // 자리의 `>` 는 이항 비교/시프트일 수 없어 닫는 꺾쇠로 확정된다((col) 은 그 토큰의 시작).
-static auto Is_closer_signal(Lines const &mask, int const row, int const col)->bool{
+auto sak::Is_closer_signal(Lines const &mask, int const row, int const col)->bool{
 	std::string const &m = mask[row];
 	int const n = static_cast<int>(m.size());
 	char const c0 = m[col];
@@ -366,8 +375,8 @@ static auto Is_closer_signal(Lines const &mask, int const row, int const col)->b
 	}
 
 	// 키워드 신호 — 정확 단어 경계(`const_cast`·`static_cast` 등 접두 오인 방지).
-	if( ::Word_starts_at(m, col) ){
-		std::string const w = ::Word_at(m, col);
+	if( Word_starts_at(m, col) ){
+		std::string const w = Word_at(m, col);
 
 		return
 			w == "const" || w == "constexpr"
@@ -381,7 +390,7 @@ static auto Is_closer_signal(Lines const &mask, int const row, int const col)->b
 // 닫힘 신호로 앵커되는 꺾쇠. `>` 뒤 첫 의미 토큰이 닫힘 신호(Is_closer_signal)면 그 `>`
 // 를 닫는 꺾쇠로 확정하고 역방향으로 짝 `<` 를 찾아 쌍(중첩 포함)을 방출한다. `template`/
 // `*_cast` 앵커의 보완재로, 인스턴스화·상속·후행반환·brace-init·특수화·변수 템플릿을 커버.
-auto Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
+auto sak::Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
 	std::vector<Angle_pair> out;
 	int const rows = static_cast<int>(mask.size());
 
@@ -410,7 +419,7 @@ auto Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
 				--w;
 			}
 
-			if( ::Word_before(mask, r, w) == "operator" ){
+			if( Word_before(mask, r, w) == "operator" ){
 				continue;
 			}
 
@@ -418,11 +427,11 @@ auto Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
 			int sr = r;
 			int sc = c + 1;
 
-			if( !::Next_code(mask, rows - 1, sr, sc) ){
+			if( !Next_code(mask, rows - 1, sr, sc) ){
 				continue;
 			}
 
-			if( !::Is_closer_signal(mask, sr, sc) ){
+			if( !Is_closer_signal(mask, sr, sc) ){
 				continue;
 			}
 
@@ -469,7 +478,7 @@ auto Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
 				if(ch == ')' || ch == ']'){
 					char const op = ch == ')' ? '(' : '[';
 
-					if( !::Match_bracket_back(mask, op, ch, br, bc) ){
+					if( !Match_bracket_back(mask, op, ch, br, bc) ){
 						aborted = true;
 
 						break;
@@ -509,7 +518,7 @@ auto Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
 
 				if(ch == '<'){
 					// operator< 이름의 `<` 는 괄호 아님.
-					if( ::Word_before(mask, br, bc) == "operator" ){
+					if( Word_before(mask, br, bc) == "operator" ){
 						--bc;
 
 						continue;
@@ -547,7 +556,7 @@ auto Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
 		}
 	}
 
-	::Dedup_angles(out);
+	Dedup_angles(out);
 
 	return out;
 }
@@ -555,18 +564,18 @@ auto Match_closer_anchored_angles(Lines const &mask)->std::vector<Angle_pair>{
 // §5.4 다중행 꺾쇠 레이아웃 — 여는 `<` 이 여는 행 마지막·닫는 `>` 이 닫는 행 첫·여닫는
 // 들여쓰기 동일·중간 코드 행 들여쓰기 ≥ 여는 행 +1.
 // `>>` 로 분해된 두 pair 는 각각 검사되지만 c_col 이 인접해 자연히 성립한다.
-void Check_multiline_angle(
+void sak::Check_multiline_angle(
 	Lines const &lines, Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
 ){
 	if(p.o_row == p.c_row){
 		return;
 	}
 
-	int const o_ind = ::Indent_depth(lines[p.o_row]);
-	int const c_ind = ::Indent_depth(lines[p.c_row]);
+	int const o_ind = Indent_depth(lines[p.o_row]);
+	int const c_ind = Indent_depth(lines[p.c_row]);
 
 	if(o_ind != c_ind){
-		::Push_fix(
+		Push_fix(
 			out, { p.c_row, 0, "5.4", "angle: open/close indent differ" },
 			Fix_kind::indent, 0, o_ind
 		);
@@ -576,7 +585,7 @@ void Check_multiline_angle(
 	int const o_n = static_cast<int>(o_line.size());
 
 	for(int cc = p.o_col + 1; cc < o_n; ++cc){
-		if( ::Is_code_char(o_line[cc]) ){
+		if( Is_code_char(o_line[cc]) ){
 			out.push_back({ p.o_row, cc, "5.4", "angle: opening '<' not last token" });
 
 			break;
@@ -586,7 +595,7 @@ void Check_multiline_angle(
 	std::string const &c_line = mask[p.c_row];
 
 	for(int cc = 0; cc < p.c_col; ++cc){
-		if( ::Is_code_char(c_line[cc]) ){
+		if( Is_code_char(c_line[cc]) ){
 			// `>>` 로 분해된 둘째 `>` 는 첫 `>` 뒤라 이 조건이 자연 걸림 —
 			// 그 자리는 첫 `>` pair 가 이미 잡아주므로 이 pair 는 skip.
 			if(cc + 1 == p.c_col && c_line[cc] == '>'){
@@ -602,12 +611,12 @@ void Check_multiline_angle(
 	int const rows = static_cast<int>(lines.size());
 
 	for(int r = p.o_row + 1; r < p.c_row && r < rows; ++r){
-		if( lines[r].empty() || !::Has_code(mask[r]) ){
+		if( lines[r].empty() || !Has_code(mask[r]) ){
 			continue;
 		}
 
-		if( ::Indent_depth(lines[r]) < o_ind + 1 ){
-			::Push_fix(
+		if( Indent_depth(lines[r]) < o_ind + 1 ){
+			Push_fix(
 				out, { r, 0, "5.4", "angle: middle line indent insufficient" },
 				Fix_kind::indent, 0, o_ind + 1
 			);
@@ -616,7 +625,7 @@ void Check_multiline_angle(
 }
 
 // §5.7 특수괄호 닫힘 — 다중행 닫는 `>` 뒤에 개행 외 코드 토큰 없음.
-void Check_angle_close_last(
+void sak::Check_angle_close_last(
 	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
 ){
 	if(p.o_row == p.c_row){
@@ -627,7 +636,7 @@ void Check_angle_close_last(
 	int const cn = static_cast<int>(c_line.size());
 
 	for(int cc = p.c_col + 1; cc < cn; ++cc){
-		if( ::Is_code_char(c_line[cc]) ){
+		if( Is_code_char(c_line[cc]) ){
 			// `>>` 로 분해된 첫 `>` 뒤 바로 다음 `>` 는 자기 짝의 c_col 이라 예외.
 			if(cc == p.c_col + 1 && c_line[cc] == '>'){
 				break;
@@ -635,7 +644,7 @@ void Check_angle_close_last(
 
 			// §4.3 — 다중행 닫는 `>` 뒤에 피연산 토큰(단어)이 이어지면 `▽` 가 개행하므로 `>` 가
 			// 행 끝에 남아야 한다(위반). 부착·종결 토큰(`(`·`::`·`;` 등)은 `▽` 자리가 아니라 침묵.
-			if( ::is_word_char(c_line[cc]) ){
+			if( is_word_char(c_line[cc]) ){
 				out.push_back(
 					{ p.c_row, cc, "4.3", "'>' before an operand: it must end the line" }
 				);
@@ -648,7 +657,7 @@ void Check_angle_close_last(
 
 // 다중행 꺾쇠의 닫는 `>` 뒤로 이어지는 `::식별자(::식별자)*` 타입 사슬의 끝(마지막 식별자
 // 바로 뒤) 열을 돌려준다. 사슬 꼴이 아니면 -1.
-auto Angle_chain_end(std::string const &m, int const from)->int{
+auto sak::Angle_chain_end(std::string const &m, int const from)->int{
 	int const n = static_cast<int>(m.size());
 	int i = from;
 
@@ -659,11 +668,11 @@ auto Angle_chain_end(std::string const &m, int const from)->int{
 	while(i + 1 < n && m[i] == ':' && m[i + 1] == ':'){
 		i += 2;
 
-		if( i >= n || !::is_word_char(m[i]) ){
+		if( i >= n || !is_word_char(m[i]) ){
 			return -1;
 		}
 
-		while( i < n && ::is_word_char(m[i]) ){
+		while( i < n && is_word_char(m[i]) ){
 			++i;
 		}
 	}
@@ -676,7 +685,7 @@ auto Angle_chain_end(std::string const &m, int const from)->int{
 // decor_head 는 식별자 앞의 데코레이터 `*`·`&` 허용 여부 — 인라인 타입의 `}` 는 피연산자가
 // 될 수 없어 곱셈·비트 AND 와 모호하지 않으므로 중괄호 쪽만 허용한다(꺾쇠 사슬 끝은 값일 수
 // 있어 불허).
-static auto Glued_declarator_tail(
+auto sak::Glued_declarator_tail(
 	std::string const &m, int const from, bool const decor_head
 )->bool{
 	int const n = static_cast<int>(m.size());
@@ -697,11 +706,11 @@ static auto Glued_declarator_tail(
 		}
 	}
 
-	if( i >= n || !::is_word_char(m[i]) ){
+	if( i >= n || !is_word_char(m[i]) ){
 		return false;
 	}
 
-	while( i < n && ::is_word_char(m[i]) ){
+	while( i < n && is_word_char(m[i]) ){
 		++i;
 	}
 
@@ -715,16 +724,16 @@ static auto Glued_declarator_tail(
 // §5.5 P5 — 다중행 타입의 변수 선언은 가상 괄호를 전개해야 한다. 다중행 `<...>` 의 닫는 행이
 // `>::사슬 <공백> 식별자 (;|,|=)` 꼴이면 위반. 좁게 — 사슬과 약식 꼬리가 정확히 맞는 자리만
 // 본다(위양성 0).
-void Check_declarator_expansion(
+void sak::Check_declarator_expansion(
 	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
 ){
 	if(p.o_row == p.c_row){
 		return;
 	}
 
-	int const i = ::Angle_chain_end(mask[p.c_row], p.c_col + 1);
+	int const i = Angle_chain_end(mask[p.c_row], p.c_col + 1);
 
-	if( i >= 0 && ::Glued_declarator_tail(mask[p.c_row], i, false) ){
+	if( i >= 0 && Glued_declarator_tail(mask[p.c_row], i, false) ){
 		out.push_back(
 			{ p.c_row, p.c_col, "5.5", "multi-line declaration must expand its virtual bracket" }
 		);
@@ -733,14 +742,14 @@ void Check_declarator_expansion(
 
 // §5.5 P5 — 인라인 타입 정의도 동일하다. 다중행 `{...}` 로 타입을 정의한 변수 선언문의 닫는
 // 행이 `} <공백> 식별자 (;|,|=)` 꼴이면 위반. 선언자가 하나든 여럿이든 같다.
-void Check_declarator_expansion_brace(
+void sak::Check_declarator_expansion_brace(
 	Lines const &mask, std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 ){
 	for(Bk_pair const &p : pairs){
 		bool const  
 			target
-			= p.o_row != p.c_row && ::Is_inline_type_close(mask, p)
-			&& ::Glued_declarator_tail(mask[p.c_row], p.c_col + p.c_len, true)
+			= p.o_row != p.c_row && Is_inline_type_close(mask, p)
+			&& Glued_declarator_tail(mask[p.c_row], p.c_col + p.c_len, true)
 		;
 
 		if(target){
@@ -755,7 +764,7 @@ void Check_declarator_expansion_brace(
 }
 
 // §8.4 경계 공백 — 여는 `<` 직전 word 는 무공백, 닫는 `>` 직후 word 는 공백·`(` `[` 은 무공백.
-void Check_angle_boundary(
+void sak::Check_angle_boundary(
 	Lines const &mask, Angle_pair const &p, std::vector<Violation> &out
 ){
 	std::string const &o_line = mask[p.o_row];
@@ -771,8 +780,8 @@ void Check_angle_boundary(
 				--q;
 			}
 
-			if( q >= 0 && ::is_word_char(o_line[q]) ){
-				::Push_fix(
+			if( q >= 0 && is_word_char(o_line[q]) ){
+				Push_fix(
 					out, { p.o_row, p.o_col, "8.4", "angle: space between word and '<'" },
 					Fix_kind::gap_left, p.o_col, 0
 				);
@@ -797,15 +806,15 @@ void Check_angle_boundary(
 
 	if(nx == '(' || nx == '['){
 		if(has_space){
-			::Push_fix(
+			Push_fix(
 				out, { p.c_row, p.c_col + 1, "8.4", "angle: space between '>' and '(' or '['" },
 				Fix_kind::gap_right, p.c_col + 1, 0
 			);
 		}
 	}
-	else if( ::is_word_char(nx) ){
+	else if( is_word_char(nx) ){
 		if(!has_space){
-			::Push_fix(
+			Push_fix(
 				out, { p.c_row, p.c_col + 1, "8.4", "angle: '>' and word need one space" },
 				Fix_kind::gap_right, p.c_col + 1, 1
 			);
@@ -815,7 +824,7 @@ void Check_angle_boundary(
 
 // §8.5 안쪽 공백 n — 단일행 꺾쇠는 자기 안 최대 중첩 단계 +1 (자기 자리 포함).
 // pairs 전체를 참조해 이 pair 안에 몇 겹의 단일행 꺾쇠가 있는지 센다.
-void Check_angle_inner_space(
+void sak::Check_angle_inner_space(
 	Lines const &mask, std::vector<Angle_pair> const &pairs,
 	Angle_pair const &p, std::vector<Violation> &out
 ){
@@ -886,14 +895,14 @@ void Check_angle_inner_space(
 	}
 
 	if(left != n){
-		::Push_fix(
+		Push_fix(
 			out, { p.o_row, p.o_col + 1, "8.5", "angle: inner space must be N" },
 			Fix_kind::gap_right, p.o_col + 1, n
 		);
 	}
 
 	if(right != n){
-		::Push_fix(
+		Push_fix(
 			out, { p.o_row, p.c_col - right, "8.5", "angle: inner space must be N" },
 			Fix_kind::gap_left, p.c_col, n
 		);

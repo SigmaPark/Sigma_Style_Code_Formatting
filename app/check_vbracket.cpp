@@ -8,13 +8,46 @@
 #include <string>
 #include <vector>
 
+namespace sak{
+	// 콜론 가상 괄호의 두 갈래 — 상속·enum 기반 타입 지정이냐, 생성자 멤버초기화 리스트냐.
+	enum class Colon_vb_kind{ inherit_or_enum, ctor_init };
+
+	static auto Next_code_row(Lines const &lines, Lines const &mask, int const from)->int;
+
+	static auto Find_stmt_semi(
+		Lines const &mask, int const r, int const from, int &close_row, int &close_col
+	)->bool;
+
+	static void Push_anchor_indent_check(
+		Lines const &lines, Lines const &mask, int const cur_row, char const *msg,
+		std::vector<Violation> &out
+	);
+
+	static void Check_colon_vbracket_layout(
+		Lines const &lines, Lines const &mask,
+		int const a_row, int const a_col, Colon_vb_kind const kind,
+		std::vector<Violation> &out
+	);
+
+	static void Scan_type_decl_colon(
+		Lines const &lines, Lines const &mask, std::vector<Violation> &out
+	);
+
+	static void Scan_ctor_init_colon(
+		Lines const &lines, Lines const &mask, std::vector<Violation> &out
+	);
+
+	static auto Marker_decl_close_row(Lines const &mask, int const r)->int;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
 // from 다음의 코드 행(공행과 주석·전처리 등 무코드 행은 건너뜀)의 번호. 없으면 행 수(rows).
-static auto Next_code_row(Lines const &lines, Lines const &mask, int const from)->int{
+auto sak::Next_code_row(Lines const &lines, Lines const &mask, int const from)->int{
 	int const rows = static_cast<int>(lines.size());
 	int nr = from + 1;
 
 	while(nr < rows){
-		if( !::Is_blank_row(lines[nr]) && ::Has_code(mask[nr]) ){
+		if( !Is_blank_row(lines[nr]) && Has_code(mask[nr]) ){
 			break;
 		}
 
@@ -26,7 +59,7 @@ static auto Next_code_row(Lines const &lines, Lines const &mask, int const from)
 
 // (r, from) 부터 행을 넘어가며 ()[]{} 통합 깊이 추적으로 depth-0 의 짝 `;` 를 찾는다.
 // 찾으면 close_row·close_col 에 위치를 채우고 true.
-static auto Find_stmt_semi(
+auto sak::Find_stmt_semi(
 	Lines const &mask, int const r, int const from, int &close_row, int &close_col
 )->bool{
 	int const rows = static_cast<int>(mask.size());
@@ -59,19 +92,19 @@ static auto Find_stmt_semi(
 }
 
 // 다음 코드 행을 찾고, 그 들여쓰기 ≥ cur+1 이 아니면 §5.5 위반(msg)으로 기록.
-static void Push_anchor_indent_check(
+void sak::Push_anchor_indent_check(
 	Lines const &lines, Lines const &mask, int const cur_row, char const *msg,
 	std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
-	int const nr = ::Next_code_row(lines, mask, cur_row);
+	int const nr = Next_code_row(lines, mask, cur_row);
 
 	if(nr >= rows){
 		return;
 	}
 
-	if( int const cur = ::Indent_depth(lines[cur_row]); ::Indent_depth(lines[nr]) < cur + 1 ){
-		::Push_fix(out, { nr, 0, "5.5", msg }, Fix_kind::indent, 0, cur + 1);
+	if( int const cur = Indent_depth(lines[cur_row]); Indent_depth(lines[nr]) < cur + 1 ){
+		Push_fix(out, { nr, 0, "5.5", msg }, Fix_kind::indent, 0, cur + 1);
 	}
 }
 
@@ -80,7 +113,7 @@ static void Push_anchor_indent_check(
 // 토큰인지, (c) 다음 코드 행 들여쓰기 ≥ cur+1 (내용 +1). 세 키워드는 정본 §5.5 표에서
 // 동일 구조(open=keyword, close=';')이므로 단일 매처로 통합. 그 외 앵커(`->`·`case`·
 // 변수선언·`:`)는 의미적 판정이 더 필요해 별도.
-void Check_anchor_keyword_semicolon(
+void sak::Check_anchor_keyword_semicolon(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
@@ -91,13 +124,13 @@ void Check_anchor_keyword_semicolon(
 		int c = 0;
 
 		while(c < n){
-			if( !::Word_starts_at(m, c) ){
+			if( !Word_starts_at(m, c) ){
 				++c;
 
 				continue;
 			}
 
-			std::string const w = ::Word_at(m, c);
+			std::string const w = Word_at(m, c);
 			int const e = c + static_cast<int>(w.size());
 
 			if(w != "return" && w != "throw" && w != "using"){
@@ -108,7 +141,7 @@ void Check_anchor_keyword_semicolon(
 
 			// (r, e) 부터 행을 넘어가며 깊이 추적으로 짝 ; 를 찾는다.
 			int close_row = -1, close_col = -1;
-			::Find_stmt_semi(mask, r, e, close_row, close_col);
+			Find_stmt_semi(mask, r, e, close_row, close_col);
 
 			// 같은 행에서 ; 를 찾았으면 단일행 return/throw — 가상괄호 미발현.
 			if(close_row == r){
@@ -121,7 +154,7 @@ void Check_anchor_keyword_semicolon(
 			bool keyword_last = true;
 
 			for(int cc = e; cc < n; ++cc){
-				if( ::Is_code_char(m[cc]) ){
+				if( Is_code_char(m[cc]) ){
 					keyword_last = false;
 
 					out.push_back({ r, cc, "5.5", "return/throw/using: keyword not last" });
@@ -134,7 +167,7 @@ void Check_anchor_keyword_semicolon(
 				std::string const &cm = mask[close_row];
 
 				for(int cc = 0; cc < close_col; ++cc){
-					if( ::Is_code_char(cm[cc]) ){
+					if( Is_code_char(cm[cc]) ){
 						out.push_back(
 							{ close_row, cc, "5.5", "return/throw/using: ';' not first" }
 						);
@@ -149,7 +182,7 @@ void Check_anchor_keyword_semicolon(
 			//  그 경우 "다음 코드 행"이 가상괄호 내용의 첫 행이 아니라
 			//  중간 괄호의 닫는 행이 될 수 있어 위양성 위험.)
 			if(keyword_last){
-				::Push_anchor_indent_check(
+				Push_anchor_indent_check(
 					lines, mask, r, "virtual bracket: continuation underindented", out
 				);
 			}
@@ -162,7 +195,7 @@ void Check_anchor_keyword_semicolon(
 // §5.5 후행반환 `->` 가상괄호.
 // `->` 직전 비공백이 `)` 이면 후행반환 자리로 본다. 같은 행에 `{` 또는 `;` 가 (괄호 깊이 0)
 // 없으면 다중행 가상괄호 발현 — 다음 코드 행 들여쓰기 ≥ `->` 행 +1.
-void Check_anchor_trailing_return(
+void sak::Check_anchor_trailing_return(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
@@ -179,7 +212,7 @@ void Check_anchor_trailing_return(
 			// `->` 직전(행을 거슬러서)의 의미 토큰이 `)` 여야 후행반환 자리다.
 			if(
 				int pr = r, pc = c - 1;
-				!::Prev_significant(mask, pr, pc) || mask[pr][pc] != ')'
+				!Prev_significant(mask, pr, pc) || mask[pr][pc] != ')'
 			){
 				continue;
 			}
@@ -215,7 +248,7 @@ void Check_anchor_trailing_return(
 				continue;
 			}
 
-			::Push_anchor_indent_check(
+			Push_anchor_indent_check(
 				lines, mask, r, "virtual bracket: continuation underindented", out
 			);
 		}
@@ -223,7 +256,7 @@ void Check_anchor_trailing_return(
 }
 
 // `}` 의 짝 `{` 직전(혹은 그 직전 식별자 직전)이 struct/class/union/enum 인지 확인.
-auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
+auto sak::Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
 	if(p.kind != '{'){
 		return false;
 	}
@@ -239,7 +272,7 @@ auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
 		return false;
 	}
 
-	std::string const w = ::Word_ending_at(m_o, q);
+	std::string const w = Word_ending_at(m_o, q);
 
 	if(w.empty()){
 		return false;
@@ -249,7 +282,7 @@ auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
 
 	if(w == "struct" || w == "class" || w == "union" || w == "enum"){
 		// `new struct S{ 1 }` 는 정의가 아니라 상술형 타입 지정 + 중괄호 초기화다 — 제외.
-		return ::Word_before(mask, p.o_row, s + 1) != "new";
+		return Word_before(mask, p.o_row, s + 1) != "new";
 	}
 
 	int q2 = s;
@@ -262,12 +295,12 @@ auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
 		return false;
 	}
 
-	std::string const w2 = ::Word_ending_at(m_o, q2);
+	std::string const w2 = Word_ending_at(m_o, q2);
 
 	if(w2 == "struct" || w2 == "class" || w2 == "union" || w2 == "enum"){
 		int const s2 = q2 - static_cast<int>(w2.size());
 
-		return ::Word_before(mask, p.o_row, s2 + 1) != "new";
+		return Word_before(mask, p.o_row, s2 + 1) != "new";
 	}
 
 	return false;
@@ -278,14 +311,14 @@ auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
 // 다음 코드 행이 식별자로 시작하면 다중행 가상괄호 발현 — 다음 코드 행 들여쓰기 ≥ `}` 행 +1.
 // 이 자리는 sak 이 마커 없이도 구조를 확정하므로, v2.10 의무 2칸 마커의 누락·오개수(≠2)까지
 // 위양성 0 으로 잡아 자동삽입한다(일반 변수선언 자리와 달리).
-void Check_anchor_inline_type(
+void sak::Check_anchor_inline_type(
 	Lines const &lines, Lines const &mask,
 	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
 
 	for(Bk_pair const &p : pairs){
-		if( !::Is_inline_type_close(mask, p) ){
+		if( !Is_inline_type_close(mask, p) ){
 			continue;
 		}
 
@@ -294,7 +327,7 @@ void Check_anchor_inline_type(
 		bool last_token = true;
 
 		for(int cc = end; cc < c_n; ++cc){
-			if( ::Is_code_char(m_c[cc]) ){
+			if( Is_code_char(m_c[cc]) ){
 				last_token = false;
 
 				break;
@@ -305,7 +338,7 @@ void Check_anchor_inline_type(
 			continue;
 		}
 
-		int const nr = ::Next_code_row(lines, mask, p.c_row);
+		int const nr = Next_code_row(lines, mask, p.c_row);
 
 		if(nr >= rows){
 			continue;
@@ -328,7 +361,7 @@ void Check_anchor_inline_type(
 
 		bool const  
 			decl_head
-			= ::is_word_char(head) || head == '*' || head == '&' || head == '('
+			= is_word_char(head) || head == '*' || head == '&' || head == '('
 		;
 
 		if(!decl_head){
@@ -349,13 +382,13 @@ void Check_anchor_inline_type(
 		}
 
 		if( pure_ws_tail && lines[p.c_row].substr(end) != "  " ){
-			::Push_fix(
+			Push_fix(
 				out, { p.c_row, end, "5.5", "inline type: var-decl marker must be two spaces" },
 				Fix_kind::gap_right, end, 2
 			);
 		}
 
-		::Push_anchor_indent_check(
+		Push_anchor_indent_check(
 			lines, mask, p.c_row, "inline type: var-list underindented", out
 		);
 	}
@@ -364,7 +397,7 @@ void Check_anchor_inline_type(
 // §5.5 case 라벨 가상괄호.
 // `case` 단어 같은 행에 (괄호 깊이 0, `::` 제외) `:` 없으면 다중행 발현 —
 // 다음 코드 행 들여쓰기 ≥ `case` 행 +1.
-void Check_anchor_case(
+void sak::Check_anchor_case(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
@@ -375,13 +408,13 @@ void Check_anchor_case(
 		int c = 0;
 
 		while(c < n){
-			if( !::Word_starts_at(m, c) ){
+			if( !Word_starts_at(m, c) ){
 				++c;
 
 				continue;
 			}
 
-			std::string const w = ::Word_at(m, c);
+			std::string const w = Word_at(m, c);
 			int const e = c + static_cast<int>(w.size());
 
 			if(w != "case"){
@@ -419,7 +452,7 @@ void Check_anchor_case(
 			}
 
 			if(!found){
-				::Push_anchor_indent_check(
+				Push_anchor_indent_check(
 					lines, mask, r, "virtual bracket: continuation underindented", out
 				);
 			}
@@ -436,9 +469,7 @@ void Check_anchor_case(
 //   (c) 사이 첫 코드 행 들여쓰기 ≥ ind(':') + 1
 // ctor init 자리에선 'mem_{val}' 형태의 braced-init 를 body '{' 로 오인하지 않도록,
 // '{' 직전 코드 문자가 식별자면 braced-init 로 간주해 짝 '}' 까지 skip.
-enum class Colon_vb_kind{ inherit_or_enum, ctor_init };
-
-static void Check_colon_vbracket_layout(
+void sak::Check_colon_vbracket_layout(
 	Lines const &lines, Lines const &mask,
 	int const a_row, int const a_col, Colon_vb_kind const kind,
 	std::vector<Violation> &out
@@ -499,8 +530,8 @@ static void Check_colon_vbracket_layout(
 
 					bool const  
 						braced_init
-						= ::Prev_significant(mask, rprev, cprev)
-						&& ::is_word_char(mask[rprev][cprev])
+						= Prev_significant(mask, rprev, cprev)
+						&& is_word_char(mask[rprev][cprev])
 					;
 
 					if(braced_init){
@@ -551,7 +582,7 @@ static void Check_colon_vbracket_layout(
 	int const an = static_cast<int>(am.size());
 
 	for(int cc = a_col + 1; cc < an; ++cc){
-		if( ::Is_code_char(am[cc]) ){
+		if( Is_code_char(am[cc]) ){
 			colon_last = false;
 
 			out.push_back({ a_row, cc, "5.5", "colon vbracket: ':' not last" });
@@ -564,7 +595,7 @@ static void Check_colon_vbracket_layout(
 	std::string const &cm = mask[close_row];
 
 	for(int cc = 0; cc < close_col; ++cc){
-		if( ::Is_code_char(cm[cc]) ){
+		if( Is_code_char(cm[cc]) ){
 			out.push_back(
 				{ close_row, cc, "5.5", "colon vbracket: '{' not first" }
 			);
@@ -578,11 +609,11 @@ static void Check_colon_vbracket_layout(
 	}
 
 	// (c) ':' 다음 첫 코드 행 들여쓰기 ≥ ind(':') + 1.
-	int const cur = ::Indent_depth(lines[a_row]);
+	int const cur = Indent_depth(lines[a_row]);
 	int nr = a_row + 1;
 
 	while(nr < rows && nr < close_row){
-		if( !::Is_blank_row(lines[nr]) && ::Has_code(mask[nr]) ){
+		if( !Is_blank_row(lines[nr]) && Has_code(mask[nr]) ){
 			break;
 		}
 
@@ -593,8 +624,8 @@ static void Check_colon_vbracket_layout(
 		return;
 	}
 
-	if( ::Indent_depth(lines[nr]) < cur + 1 ){
-		::Push_fix(
+	if( Indent_depth(lines[nr]) < cur + 1 ){
+		Push_fix(
 			out, { nr, 0, "5.5", "colon vbracket: content underindented" },
 			Fix_kind::indent, 0, cur + 1
 		);
@@ -604,7 +635,7 @@ static void Check_colon_vbracket_layout(
 // §5.5 콜론 가상괄호 스캐너 (A) — 상속·enum 기반 타입.
 // class/struct/union/enum 키워드 앵커에서 전방 스캔, (), <>, [] 깊이 추적으로
 // depth-0 ':' 이 나오면 앵커 확정. 앞서 '{' 나 ';' 을 만나면 무시 (본체 시작 or 전방 선언).
-static void Scan_type_decl_colon(
+void sak::Scan_type_decl_colon(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
@@ -615,13 +646,13 @@ static void Scan_type_decl_colon(
 		int c = 0;
 
 		while(c < n){
-			if( !::Word_starts_at(m, c) ){
+			if( !Word_starts_at(m, c) ){
 				++c;
 
 				continue;
 			}
 
-			std::string const w = ::Word_at(m, c);
+			std::string const w = Word_at(m, c);
 			int const e = c + static_cast<int>(w.size());
 
 			if(w != "class" && w != "struct" && w != "union" && w != "enum"){
@@ -638,7 +669,7 @@ static void Scan_type_decl_colon(
 					--pc;
 				}
 
-				if( pc >= 0 && ::Word_ending_at(m, pc) == "enum" ){
+				if( pc >= 0 && Word_ending_at(m, pc) == "enum" ){
 					c = e;
 
 					continue;
@@ -700,7 +731,7 @@ static void Scan_type_decl_colon(
 			}
 
 			if(colon_row >= 0){
-				::Check_colon_vbracket_layout(
+				Check_colon_vbracket_layout(
 					lines, mask, colon_row, colon_col,
 					Colon_vb_kind::inherit_or_enum, out
 				);
@@ -714,7 +745,7 @@ static void Scan_type_decl_colon(
 // §5.5 콜론 가상괄호 스캐너 (B) — 생성자 멤버초기화 리스트.
 // ':' 좌측 근접 코드 문자가 ')' 이고, 문장 시작부터 여기까지 '?' 스택이 balanced 면 ctor init.
 // 문장 시작 = 역방향으로 depth-0 의 ';' / '{' / '}' 를 만난 지점 (또는 파일 시작).
-static void Scan_ctor_init_colon(
+void sak::Scan_ctor_init_colon(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
@@ -740,7 +771,7 @@ static void Scan_ctor_init_colon(
 			// 좌측 근접 코드 문자(행을 거슬러서)가 ')' 여야 ctor init 자리다.
 			if(
 				int pr = r, pc = c - 1;
-				!::Prev_significant(mask, pr, pc) || mask[pr][pc] != ')'
+				!Prev_significant(mask, pr, pc) || mask[pr][pc] != ')'
 			){
 				continue;
 			}
@@ -850,7 +881,7 @@ static void Scan_ctor_init_colon(
 				continue;
 			}
 
-			::Check_colon_vbracket_layout(
+			Check_colon_vbracket_layout(
 				lines, mask, r, c, Colon_vb_kind::ctor_init, out
 			);
 		}
@@ -858,11 +889,11 @@ static void Scan_ctor_init_colon(
 }
 
 // §5.5 콜론 가상괄호 — 두 스캐너 병치 진입점.
-void Check_anchor_colon_vbracket(
+void sak::Check_anchor_colon_vbracket(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
-	::Scan_type_decl_colon(lines, mask, out);
-	::Scan_ctor_init_colon(lines, mask, out);
+	Scan_type_decl_colon(lines, mask, out);
+	Scan_ctor_init_colon(lines, mask, out);
 }
 
 // §5.5 변수 선언문 가상괄호 — 의무화된 2칸 마커로 반자동 감지 (v2.10: 마커는 권장이 아니라
@@ -878,11 +909,11 @@ void Check_anchor_colon_vbracket(
 // (무해한 거짓음성 → 서브에이전트 폴백). 위양성 0 계약은 사용자 표식을 신뢰하는 형태로 지킨다.
 // 변수 선언문 2칸 마커 행인가 — 마커 후보(정확히 2칸 꼬리 + 타입 꼬리 문자)에서 통합 깊이
 // 추적으로 짝 `;` 를 찾아, 다른 행 첫 코드 토큰이면 그 닫는 행을 돌려준다. 아니면 -1.
-static auto Marker_decl_close_row(Lines const &mask, int const r)->int{
+auto sak::Marker_decl_close_row(Lines const &mask, int const r)->int{
 	std::string const &m = mask[r];
 	int const n = static_cast<int>(m.size());
 
-	if( ::Tail_spaces(m) != 2 ){
+	if( Tail_spaces(m) != 2 ){
 		return -1;
 	}
 
@@ -890,7 +921,7 @@ static auto Marker_decl_close_row(Lines const &mask, int const r)->int{
 
 	int const p = t - 1;
 
-	if( p < 0 || !::Is_code_char(m[p]) ){
+	if( p < 0 || !Is_code_char(m[p]) ){
 		return -1;
 	}
 
@@ -904,12 +935,12 @@ static auto Marker_decl_close_row(Lines const &mask, int const r)->int{
 
 	int close_row = -1, close_col = -1;
 
-	if( !::Find_stmt_semi(mask, r, t, close_row, close_col) ){
+	if( !Find_stmt_semi(mask, r, t, close_row, close_col) ){
 		return -1;
 	}
 
 	bool const  
-		vclose = close_row > r && ::First_significant_col(mask[close_row]) == close_col
+		vclose = close_row > r && First_significant_col(mask[close_row]) == close_col
 	;
 
 	return vclose ? close_row : -1;
@@ -924,7 +955,7 @@ static auto Marker_decl_close_row(Lines const &mask, int const r)->int{
 //     전개 내용일 때만 — 홀로 선 빈 문장 `;` 과 가른다). 아래 인접 행이 같은 깊이의 코드면
 //     그 사이엔 공행이 필수다.
 // 다중행 소괄호·첨자·속성 안은 문장이 아니라 이음줄이라 제외한다(`for` 머리의 `;` 포함).
-void Check_vbracket_blank_line(
+void sak::Check_vbracket_blank_line(
 	Lines const &lines, Lines const &mask, Lines const &cut_mask,
 	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 ){
@@ -946,19 +977,19 @@ void Check_vbracket_blank_line(
 			continue;
 		}
 
-		int const fc = ::First_significant_col(mask[r]);
+		int const fc = First_significant_col(mask[r]);
 
 		if(fc < 0){
 			continue;
 		}
 
-		int const lc = ::Last_significant_col(mask[r]);
+		int const lc = Last_significant_col(mask[r]);
 
 		// 여는 행 — return/throw/using 홀로, 또는 2칸 마커 행.
 		bool open_row = false;
 
-		if( ::is_word_char(mask[r][fc]) ){
-			std::string const w = ::Word_at(mask[r], fc);
+		if( is_word_char(mask[r][fc]) ){
+			std::string const w = Word_at(mask[r], fc);
 
 			bool const  
 				kw_alone
@@ -969,7 +1000,7 @@ void Check_vbracket_blank_line(
 			open_row = kw_alone;
 		}
 
-		if( !open_row && ::Marker_decl_close_row(cut_mask, r) >= 0 ){
+		if( !open_row && Marker_decl_close_row(cut_mask, r) >= 0 ){
 			open_row = true;
 		}
 
@@ -978,11 +1009,11 @@ void Check_vbracket_blank_line(
 
 			bool const  
 				collides
-				= !::Is_blank_row(lines[pr]) && ::Has_code(mask[pr])
-				&& ::Indent_depth(lines[pr]) == ::Indent_depth(lines[r])
+				= !Is_blank_row(lines[pr]) && Has_code(mask[pr])
+				&& Indent_depth(lines[pr]) == Indent_depth(lines[r])
 				&& (
-					::Last_code_char(mask[pr]) == ';'
-					|| ::Last_code_char(mask[pr]) == '}'
+					Last_code_char(mask[pr]) == ';'
+					|| Last_code_char(mask[pr]) == '}'
 				)
 			;
 
@@ -999,8 +1030,8 @@ void Check_vbracket_blank_line(
 		if(semi_alone && r > 0 && r + 1 < rows){
 			bool const  
 				vclose
-				= ::Has_code(mask[r - 1])
-				&& ::Indent_depth(lines[r - 1]) == ::Indent_depth(lines[r]) + 1
+				= Has_code(mask[r - 1])
+				&& Indent_depth(lines[r - 1]) == Indent_depth(lines[r]) + 1
 			;
 
 			int const nr = r + 1;
@@ -1008,9 +1039,9 @@ void Check_vbracket_blank_line(
 			bool const  
 				collides
 				= vclose
-				&& !::Is_blank_row(lines[nr]) && ::Has_code(mask[nr])
-				&& ::Indent_depth(lines[nr]) == ::Indent_depth(lines[r])
-				&& !::Continues_statement(mask[nr], true)
+				&& !Is_blank_row(lines[nr]) && Has_code(mask[nr])
+				&& Indent_depth(lines[nr]) == Indent_depth(lines[r])
+				&& !Continues_statement(mask[nr], true)
 			;
 
 			if(collides){
@@ -1022,7 +1053,7 @@ void Check_vbracket_blank_line(
 	}
 }
 
-void Check_anchor_var_decl_marker(
+void sak::Check_anchor_var_decl_marker(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
@@ -1032,7 +1063,7 @@ void Check_anchor_var_decl_marker(
 		int const n = static_cast<int>(m.size());
 
 		// 꼬리 공백이 정확히 2칸(§5.5 마커)이어야 후보다. 탭은 §8.2 소관이라 세지 않는다.
-		if( ::Tail_spaces(m) != 2 ){
+		if( Tail_spaces(m) != 2 ){
 			continue;
 		}
 
@@ -1041,7 +1072,7 @@ void Check_anchor_var_decl_marker(
 		// 2칸 바로 앞은 코드 문자여야 하고, 타입 표현의 꼬리로 볼 수 있어야 한다.
 		int const p = t - 1;
 
-		if( p < 0 || !::Is_code_char(m[p]) ){
+		if( p < 0 || !Is_code_char(m[p]) ){
 			continue;
 		}
 
@@ -1055,7 +1086,7 @@ void Check_anchor_var_decl_marker(
 
 		// 후보 지점부터 통합 깊이 추적으로 짝 `;` 를 찾는다(중첩 `()[]{}`·람다 본문 skip).
 		int close_row = -1, close_col = -1;
-		::Find_stmt_semi(mask, r, t, close_row, close_col);
+		Find_stmt_semi(mask, r, t, close_row, close_col);
 
 		// 짝 `;` 를 못 찾았거나 같은 행이면 변수선언 가상괄호로 확정하지 않는다.
 		if(close_row <= r){
@@ -1066,7 +1097,7 @@ void Check_anchor_var_decl_marker(
 		std::string const &cm = mask[close_row];
 
 		for(int cc = 0; cc < close_col; ++cc){
-			if( ::Is_code_char(cm[cc]) ){
+			if( Is_code_char(cm[cc]) ){
 				out.push_back({ close_row, cc, "5.5", "var-decl marker: ';' not first" });
 
 				break;
@@ -1074,7 +1105,7 @@ void Check_anchor_var_decl_marker(
 		}
 
 		// (c) 다음 코드 행 들여쓰기 ≥ 마커 행 +1.
-		::Push_anchor_indent_check(
+		Push_anchor_indent_check(
 			lines, mask, r, "var-decl marker: continuation underindented", out
 		);
 	}

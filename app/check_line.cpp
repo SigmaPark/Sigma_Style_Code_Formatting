@@ -8,9 +8,16 @@
 #include <string>
 #include <vector>
 
+namespace sak{
+	static auto Closer_of(char const open)->char;
+	static auto is_basic_type(std::string const &w)->bool;
+	static auto Token_text(std::string const &mask, Tok_8_3 const &t)->std::string;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
 // §1.1 행 표시 폭 100 초과 (raw 행).
-void Check_width(std::string const &line, int const row, std::vector<Violation> &out){
-	std::size_t const w = ::Display_width(line);
+void sak::Check_width(std::string const &line, int const row, std::vector<Violation> &out){
+	std::size_t const w = Display_width(line);
 
 	if(w > 100){
 		std::string const msg = "width " + std::to_string(w) + " > 100";
@@ -20,8 +27,8 @@ void Check_width(std::string const &line, int const row, std::vector<Violation> 
 }
 
 // §1.3 들여쓰기에 공백 (raw 행). 공행의 백문자는 들여쓰기가 아니므로(§9.4) 건너뛴다.
-void Check_indent(std::string const &line, int const row, std::vector<Violation> &out){
-	if( ::Is_blank_row(line) ){
+void sak::Check_indent(std::string const &line, int const row, std::vector<Violation> &out){
+	if( Is_blank_row(line) ){
 		return;
 	}
 
@@ -43,8 +50,8 @@ void Check_indent(std::string const &line, int const row, std::vector<Violation>
 // §8.3 는 별도 후행-공백 검사를 두지 않는다.
 
 // §8.2 들여쓰기 이외 용도의 탭 (@마스크). 선두 들여쓰기 탭 이후의 탭은 위반.
-void Check_tab_use(std::string const &mask, int const row, std::vector<Violation> &out){
-	if( ::Is_blank_row(mask) ){
+void sak::Check_tab_use(std::string const &mask, int const row, std::vector<Violation> &out){
+	if( Is_blank_row(mask) ){
 		return;
 	}
 
@@ -65,8 +72,8 @@ void Check_tab_use(std::string const &mask, int const row, std::vector<Violation
 }
 
 // §8.2 공백 4칸 이상 연속 (@마스크). 선두 들여쓰기 구역은 §1.3 소관이라 건너뛴다.
-void Check_space_run(std::string const &mask, int const row, std::vector<Violation> &out){
-	if( ::Is_blank_row(mask) ){
+void sak::Check_space_run(std::string const &mask, int const row, std::vector<Violation> &out){
+	if( Is_blank_row(mask) ){
 		return;
 	}
 
@@ -96,7 +103,7 @@ void Check_space_run(std::string const &mask, int const row, std::vector<Violati
 }
 
 // 여는 괄호에 대응하는 닫는 괄호.
-static auto Closer_of(char const open)->char{
+auto sak::Closer_of(char const open)->char{
 	if(open == '('){
 		return ')';
 	}
@@ -113,7 +120,7 @@ static auto Closer_of(char const open)->char{
 // < > 와 [[ ]] 와 다중행 괄호는 제외(에이전트 몫).
 // 내용 없는 괄호쌍(§8.5) — 안이 모두 공백이면 그 공백을 지우고(n=0, 중괄호도 예외 없음)
 // 중첩 단계에도 세지 않는다. 문자가 곧바로 인접한 빈 쌍은 검사할 것이 없어 그대로 지나친다.
-void Check_inner_space(std::string const &mask, int const row, std::vector<Violation> &out){
+void sak::Check_inner_space(std::string const &mask, int const row, std::vector<Violation> &out){
 	struct Frame{
 		char open;
 		int col;
@@ -169,7 +176,7 @@ void Check_inner_space(std::string const &mask, int const row, std::vector<Viola
 				continue;
 			}
 
-			if( c != ::Closer_of(stack.back().open) ){
+			if( c != Closer_of(stack.back().open) ){
 				aborted = true;
 
 				break;
@@ -239,11 +246,11 @@ void Check_inner_space(std::string const &mask, int const row, std::vector<Viola
 		}
 
 		if(after != want){
-			::Push_fix(out, { row, pr.from, "8.5", msg }, Fix_kind::gap_right, pr.from + 1, want);
+			Push_fix(out, { row, pr.from, "8.5", msg }, Fix_kind::gap_right, pr.from + 1, want);
 		}
 
 		if(before != want){
-			::Push_fix(out, { row, pr.to, "8.5", msg }, Fix_kind::gap_left, pr.to, want);
+			Push_fix(out, { row, pr.to, "8.5", msg }, Fix_kind::gap_left, pr.to, want);
 		}
 	}
 }
@@ -251,19 +258,19 @@ void Check_inner_space(std::string const &mask, int const row, std::vector<Viola
 // §3 제어문 중괄호 강제 (@마스크 + 인접 행). 키워드 다음 본문이 '{' 인지 본다.
 // if/for/while/switch 는 조건 ')' 다음을, do/else 는 키워드 다음을 본다.
 // while(...); 는 직전 '}' 가 do 블록을 닫으면 do-while 꼬리라 합법, 아니면 위반(빈본문 while).
-void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Violation> &out){
+void sak::Check_ctrl_brace(Lines const &mask, int const row, std::vector<Violation> &out){
 	std::string const &line = mask[row];
 	int const len = static_cast<int>(line.size()), last = static_cast<int>(mask.size()) - 1;
 	int const max_row = row + 4 < last ? row + 4 : last;
 
 	for(int i = 0; i < len;){
-		if( !::Word_starts_at(line, i) ){
+		if( !Word_starts_at(line, i) ){
 			++i;
 
 			continue;
 		}
 
-		std::string const word = ::Word_at(line, i);
+		std::string const word = Word_at(line, i);
 		int const e = i + static_cast<int>(word.size());
 
 		auto const  
@@ -275,17 +282,17 @@ void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Violation> &
 				if(has_cond){
 					if(
 						int pr = row, pc = e;
-						::Next_code(mask, max_row, pr, pc) && mask[pr][pc] == '('
+						Next_code(mask, max_row, pr, pc) && mask[pr][pc] == '('
 					){
-						if( ::Match_paren(mask, max_row, pr, pc) ){
+						if( Match_paren(mask, max_row, pr, pc) ){
 							br = pr;
 							bc = pc + 1;
-							body_found = ::Next_code(mask, max_row, br, bc);
+							body_found = Next_code(mask, max_row, br, bc);
 						}
 					}
 				}
 				else if(word == "do" || word == "else"){
-					body_found = ::Next_code(mask, max_row, br, bc);
+					body_found = Next_code(mask, max_row, br, bc);
 				}
 
 				return res;
@@ -297,8 +304,8 @@ void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Violation> &
 
 			bool const  
 				legal
-				= word == "while" && body == ';' ? ::Is_do_tail(mask, row, i)
-				: word == "else" && body != '{' ? ::Word_at(mask[br], bc) == "if"
+				= word == "while" && body == ';' ? Is_do_tail(mask, row, i)
+				: word == "else" && body != '{' ? Word_at(mask[br], bc) == "if"
 				: body == '{'
 			;
 
@@ -320,7 +327,7 @@ void Check_ctrl_brace(Lines const &mask, int const row, std::vector<Violation> &
 // 닫는괄호 다음에 여는괄호가 오면 그 사이 공백 = 위반(v2.2.0) — 앞의 닫는 괄호까지를 하나의
 // 피연산 토큰으로 보고 그 뒤에서 새 괄호가 열리는 자리다(호출·첨자의 연쇄, 람다).
 // 꺾쇠 < > 는 비교/꺾쇠 모호성 탓에 sak 보수 영역에서 제외(§5.1·범주 4).
-void Check_word_paren_space(
+void sak::Check_word_paren_space(
 	std::string const &mask, int const row, std::vector<Violation> &out
 ){
 	auto const is_open = [](char const ch)->bool{ return ch == '(' || ch == '[' || ch == '{'; };
@@ -336,11 +343,11 @@ void Check_word_paren_space(
 	while(p < n){
 		char const c = mask[p];
 
-		if( ::is_word_char(c) ){
+		if( is_word_char(c) ){
 			int const  
 				e
 				= [n, &mask](int res){
-					for( ; res < n && ::is_word_char(mask[res]); ++res ){}
+					for( ; res < n && is_word_char(mask[res]); ++res ){}
 
 					return res;
 				}(p),
@@ -353,14 +360,14 @@ void Check_word_paren_space(
 			;
 
 			if( q > e && q < n && is_open(mask[q]) ){
-				::Push_fix(
+				Push_fix(
 					out, { row, e, "8.4", "space between word and opening bracket" },
 					Fix_kind::gap_right, e, 0
 				);
 			}
 
-			if( q - e > 1 && q < n && ::is_word_char(mask[q]) ){
-				::Push_fix(
+			if( q - e > 1 && q < n && is_word_char(mask[q]) ){
+				Push_fix(
 					out, { row, e, "8.4", "words must be separated by exactly one space" },
 					Fix_kind::gap_right, e, 1
 				);
@@ -372,8 +379,8 @@ void Check_word_paren_space(
 		}
 
 		if( is_close(c) ){
-			if( p + 1 < n && ::is_word_char(mask[p + 1]) ){
-				::Push_fix(
+			if( p + 1 < n && is_word_char(mask[p + 1]) ){
+				Push_fix(
 					out, { row, p + 1, "8.4", "missing space between closing bracket and word" },
 					Fix_kind::gap_left, p + 1, 1
 				);
@@ -389,7 +396,7 @@ void Check_word_paren_space(
 			;
 
 			if( q > p + 1 && q < n && is_open(mask[q]) ){
-				::Push_fix(
+				Push_fix(
 					out, { row, p + 1, "8.4", "no space between closing and opening bracket" },
 					Fix_kind::gap_right, p + 1, 0
 				);
@@ -405,21 +412,21 @@ void Check_word_paren_space(
 // 다음 행 머리에 와야 하고(같은 행 응집=위반), 본체가 단일행이면 `▽` 가 개행하지 않으므로 `}` 와
 // 한 행에 응집해야 한다(다음 행 분리=위반). 판정은 그 `}` 의 짝 `{` 이 다른 행인지(다중행 본체)로만
 // 한다 — 짝을 못 찾거나 앞이 `}` 가 아니면 보수적으로 침묵한다(매크로·불완전).
-void Check_continuation_cohesion(
+void sak::Check_continuation_cohesion(
 	Lines const &mask, int const row, std::vector<Violation> &out
 ){
 	std::string const &m = mask[row];
 	int const n = static_cast<int>(m.size());
 
 	for(int c = 0; c < n; ++c){
-		if( !::Word_starts_at(m, c) ){
+		if( !Word_starts_at(m, c) ){
 			continue;
 		}
 
-		std::string const w = ::Word_at(m, c);
+		std::string const w = Word_at(m, c);
 		bool is_clause = w == "else" || w == "catch";
 
-		if( w == "while" && ::Is_do_tail(mask, row, c) ){
+		if( w == "while" && Is_do_tail(mask, row, c) ){
 			is_clause = true;
 		}
 
@@ -429,7 +436,7 @@ void Check_continuation_cohesion(
 
 		int pr = row, pc = c - 1;
 
-		if( !::Prev_significant(mask, pr, pc) || mask[pr][pc] != '}' ){
+		if( !Prev_significant(mask, pr, pc) || mask[pr][pc] != '}' ){
 			continue;
 		}
 
@@ -454,7 +461,7 @@ void Check_continuation_cohesion(
 
 		int br = pr, bc = pc;
 
-		if( !::Match_brace_back(mask, br, bc) ){
+		if( !Match_brace_back(mask, br, bc) ){
 			continue;
 		}
 
@@ -474,7 +481,7 @@ void Check_continuation_cohesion(
 }
 
 // @마스크 한 행을 토큰열로 변환. 더 긴 모양 우선 매칭, 의심 자리는 모두 skip.
-auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
+auto sak::Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
 	std::vector<Tok_8_3> out;
 	int const n = static_cast<int>(mask.size());
 	int i = 0;
@@ -488,10 +495,10 @@ auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
 			continue;
 		}
 
-		if( ::is_word_char(c) ){
+		if( is_word_char(c) ){
 			int const s = i;
 
-			while( i < n && ::is_word_char(mask[i]) ){
+			while( i < n && is_word_char(mask[i]) ){
 				++i;
 			}
 
@@ -695,10 +702,10 @@ auto Tokenize_8_3(std::string const &mask)->std::vector<Tok_8_3>{
 //                          기호형이면 그 쪽 검사 제외(연쇄·단항 영역 양보).
 //   inc_dec ++ --    — 한 쪽은 0(피연산자 부착). 양쪽 모두 공백 > 0 이면 위반.
 // 괄호 경계 투명성(§5.3): 단일행 괄호 안 첫·마지막 토큰은 감싸는 괄호를 인접 토큰으로 보지 않음.
-void Check_token_space(
+void sak::Check_token_space(
 	std::string const &mask, int const row, std::vector<Violation> &out
 ){
-	auto const toks = ::Tokenize_8_3(mask);
+	auto const toks = Tokenize_8_3(mask);
 	int const n = static_cast<int>(toks.size()), mask_n = static_cast<int>(mask.size());
 
 	if(n < 2){
@@ -786,21 +793,21 @@ void Check_token_space(
 				;
 
 				if( eff_l && !semi_chain && gap_before(i) > 0 ){
-					::Push_fix(
+					Push_fix(
 						out, { row, t.col, "8.4", "no space before separator" },
 						Fix_kind::gap_left, t.col, 0
 					);
 				}
 
 				if( eff_l && semi_chain && gap_before(i) == 0 ){
-					::Push_fix(
+					Push_fix(
 						out, { row, t.col, "8.4", "space required between consecutive ';'" },
 						Fix_kind::gap_left, t.col, 1
 					);
 				}
 
 				if( eff_r && right_cls != Tk_cls::sep && gap_after(i) == 0 ){
-					::Push_fix(
+					Push_fix(
 						out, { row, t.col + t.len, "8.4", "space required after separator" },
 						Fix_kind::gap_right, t.col + t.len, 1
 					);
@@ -815,14 +822,14 @@ void Check_token_space(
 			}
 
 			if( eff_l && l_operand && gap_before(i) > 0 ){
-				::Push_fix(
+				Push_fix(
 					out, { row, t.col, "8.4", "no space before '.','->','.*','->*'" },
 					Fix_kind::gap_left, t.col, 0
 				);
 			}
 
 			if( eff_r && r_operand && gap_after(i) > 0 ){
-				::Push_fix(
+				Push_fix(
 					out, { row, t.col + t.len, "8.4", "no space after '.','->','.*','->*'" },
 					Fix_kind::gap_right, t.col + t.len, 0
 				);
@@ -832,14 +839,14 @@ void Check_token_space(
 
 		case Tk_cls::bin_s:
 			if( eff_l && l_operand && gap_before(i) == 0 ){
-				::Push_fix(
+				Push_fix(
 					out, { row, t.col, "8.4", "space required before binary operator" },
 					Fix_kind::gap_left, t.col, 1
 				);
 			}
 
 			if( eff_r && r_operand && gap_after(i) == 0 ){
-				::Push_fix(
+				Push_fix(
 					out, { row, t.col + t.len, "8.4", "space required after binary operator" },
 					Fix_kind::gap_right, t.col + t.len, 1
 				);
@@ -861,7 +868,7 @@ void Check_token_space(
 }
 
 // §3 금지 키워드 typedef/goto (@마스크, 단어 경계).
-void Check_banned(std::string const &mask, int const row, std::vector<Violation> &out){
+void sak::Check_banned(std::string const &mask, int const row, std::vector<Violation> &out){
 	static std::string const Banned[] = { "typedef", "goto" };
 
 	for(std::string const &kw : Banned){
@@ -872,8 +879,8 @@ void Check_banned(std::string const &mask, int const row, std::vector<Violation>
 		){
 			if(
 				std::size_t const end = pos + kw.size();
-				( pos == 0 || !::is_word_char(mask[pos - 1]) )
-				&& ( end >= mask.size() || !::is_word_char(mask[end]) )
+				( pos == 0 || !is_word_char(mask[pos - 1]) )
+				&& ( end >= mask.size() || !is_word_char(mask[end]) )
 			){
 				int const col = static_cast<int>(pos);
 
@@ -884,7 +891,7 @@ void Check_banned(std::string const &mask, int const row, std::vector<Violation>
 }
 
 // §3 키워드 위치 후보 — 기본 타입 키워드(닫힌 집합).
-static auto is_basic_type(std::string const &w)->bool{
+auto sak::is_basic_type(std::string const &w)->bool{
 	static char const * const  
 		Types[]
 		= {
@@ -903,7 +910,7 @@ static auto is_basic_type(std::string const &w)->bool{
 }
 
 // 토큰 t 의 @마스크상 텍스트.
-static auto Token_text(std::string const &mask, Tok_8_3 const &t)->std::string{
+auto sak::Token_text(std::string const &mask, Tok_8_3 const &t)->std::string{
 	return mask.substr(t.col, t.len);
 }
 
@@ -913,10 +920,10 @@ static auto Token_text(std::string const &mask, Tok_8_3 const &t)->std::string{
 //   `const|volatile|constexpr` + 기본타입  → 한정자가 타입 앞 = 서향 위반.
 //   기본타입 + `static|inline`             → 스토리지 지정자가 타입 뒤 = 위반.
 // `if constexpr` 는 constexpr 뒤가 '(' 라 단어쌍이 아니어서 자연히 제외된다.
-void Check_keyword_position(
+void sak::Check_keyword_position(
 	std::string const &mask, int const row, std::vector<Violation> &out
 ){
-	auto const toks = ::Tokenize_8_3(mask);
+	auto const toks = Tokenize_8_3(mask);
 	int const n = static_cast<int>(toks.size());
 
 	for(int i = 0; i + 1 < n; ++i){
@@ -924,16 +931,16 @@ void Check_keyword_position(
 			continue;
 		}
 
-		std::string const w0 = ::Token_text(mask, toks[i]), w1 = ::Token_text(mask, toks[i + 1]);
+		std::string const w0 = Token_text(mask, toks[i]), w1 = Token_text(mask, toks[i + 1]);
 		bool const qual0 = w0 == "const" || w0 == "volatile" || w0 == "constexpr";
 		bool const stor1 = w1 == "static" || w1 == "inline";
 
-		if( qual0 && ::is_basic_type(w1) ){
+		if( qual0 && is_basic_type(w1) ){
 			out.push_back(
 				{ row, toks[i].col, "3", "const/volatile/constexpr must follow its type" }
 			);
 		}
-		else if( ::is_basic_type(w0) && stor1 ){
+		else if( is_basic_type(w0) && stor1 ){
 			out.push_back({ row, toks[i + 1].col, "3", "static/inline must precede its type" });
 		}
 	}
@@ -943,10 +950,10 @@ void Check_keyword_position(
 // 붙이면 `--`/`++` 가 되어 의미가 바뀌므로 괄호로 구분해야 한다(`-(-x)`).
 // 첫 부호가 단항임이 어휘적으로 확실한 자리(직전이 여는괄호·구분자·양쪽공백 이항연산자)에서만
 // 확정한다. 직전이 피연산자(식별자·닫는괄호 등)면 이항일 수 있어 서브에이전트 몫.
-void Check_unary_juxtaposition(
+void sak::Check_unary_juxtaposition(
 	std::string const &mask, int const row, std::vector<Violation> &out
 ){
-	auto const toks = ::Tokenize_8_3(mask);
+	auto const toks = Tokenize_8_3(mask);
 	int const n = static_cast<int>(toks.size());
 
 	for(int i = 1; i + 1 < n; ++i){

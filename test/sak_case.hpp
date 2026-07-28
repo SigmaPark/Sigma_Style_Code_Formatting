@@ -11,6 +11,12 @@
 #include "check.hpp"
 #include "lexer.hpp"
 
+// The checker now lives in namespace sak. A case file reads better with the three names it
+// handles constantly kept bare, so they are pulled in here once for the whole suite.
+using sak::Lines;
+using sak::V_cat;
+using sak::Violation;
+
 namespace sakt{
 
 	// A snippet is held directly as a list of lines (Lines) - each line is an explicit string

@@ -8,8 +8,14 @@
 #include <string>
 #include <vector>
 
+namespace sak{
+	static auto Is_empty_pair(std::string const &line, int const from, int const to)->bool;
+	static auto Is_hidden_gap_row(Lines const &lines, Lines const &mask, int const r)->bool;
+}
+//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
+
 // 단일행에서 여닫는 괄호 사이 [from, to) 가 공백·탭·@뿐인지 — §5.1 내용 없는 괄호쌍 판정.
-static auto Is_empty_pair(std::string const &line, int const from, int const to)->bool{
+auto sak::Is_empty_pair(std::string const &line, int const from, int const to)->bool{
 	for(int cc = from; cc < to; ++cc){
 		char const ic = line[cc];
 
@@ -24,7 +30,7 @@ static auto Is_empty_pair(std::string const &line, int const from, int const to)
 // @마스크 전체를 스캔해 ()/{}/[]/[[ ]] 짝을 모은다. 짝이 깨지면 그 자리는 버린다.
 // 단일행 빈 괄호(())/{}/[]/[[]]는 §5.1에 따라 괄호 표현이 아니므로 제외한다.
 // (다중행 빈 괄호는 거의 없으니 보수적으로 통과시킨다.)
-auto Match_brackets(Lines const &mask)->std::vector<Bk_pair>{
+auto sak::Match_brackets(Lines const &mask)->std::vector<Bk_pair>{
 	std::vector<Bk_pair> out;
 
 	struct Frame{
@@ -57,7 +63,7 @@ auto Match_brackets(Lines const &mask)->std::vector<Bk_pair>{
 				Frame const f = st.back();
 				st.pop_back();
 
-				if( f.r != r || !::Is_empty_pair(line, f.c + f.len, c) ){
+				if( f.r != r || !Is_empty_pair(line, f.c + f.len, c) ){
 					out.push_back({ f.r, f.c, f.len, r, c, 2, 'A' });
 				}
 
@@ -80,7 +86,7 @@ auto Match_brackets(Lines const &mask)->std::vector<Bk_pair>{
 					Frame const f = st.back();
 					st.pop_back();
 
-					if( f.r != r || !::Is_empty_pair(line, f.c + f.len, c) ){
+					if( f.r != r || !Is_empty_pair(line, f.c + f.len, c) ){
 						out.push_back({ f.r, f.c, f.len, r, c, 1, want });
 					}
 				}
@@ -107,31 +113,31 @@ auto Match_brackets(Lines const &mask)->std::vector<Bk_pair>{
 // 그 행의 raw 들여쓰기는 spec 상 들여쓰기가 아니므로 비교 대상에서 뺀다.
 // 행 R 이 닫는 숨은 중괄호 `⦄▽` 의 자리(물리적 빈 행)인가 — 공행이고, 아래로 공행을 건너 만나는
 // 첫 비공행이 라벨 행이면 그렇다. 이 자리의 공행은 §5.6 리듬이 관할하므로 §9.4 형상 검사에서 뺀다.
-static auto Is_hidden_gap_row(Lines const &lines, Lines const &mask, int const r)->bool{
-	if( !::Is_blank_row(lines[r]) ){
+auto sak::Is_hidden_gap_row(Lines const &lines, Lines const &mask, int const r)->bool{
+	if( !Is_blank_row(lines[r]) ){
 		return false;
 	}
 
 	int const rows = static_cast<int>(lines.size());
 	int d = r + 1;
 
-	while( d < rows && ::Is_blank_row(lines[d]) ){
+	while( d < rows && Is_blank_row(lines[d]) ){
 		++d;
 	}
 
 	int hc = 0;
 
-	return d < rows && ::Label_row(mask, d, hc);
+	return d < rows && Label_row(mask, d, hc);
 }
 
-void Check_blank_line(
+void sak::Check_blank_line(
 	Lines const &lines, Lines const &mask, int const row, std::vector<Violation> &out
 ){
-	if( !::Is_blank_row(lines[row]) ){
+	if( !Is_blank_row(lines[row]) ){
 		return;
 	}
 
-	if( ::Is_hidden_gap_row(lines, mask, row) ){
+	if( Is_hidden_gap_row(lines, mask, row) ){
 		return; // §5.6 리듬 관할 — ⦄▽ 자리의 공행
 	}
 
@@ -145,11 +151,11 @@ void Check_blank_line(
 		return;
 	}
 
-	if( !::Has_code(mask[row - 1]) || !::Has_code(mask[row + 1]) ){
+	if( !Has_code(mask[row - 1]) || !Has_code(mask[row + 1]) ){
 		return;
 	}
 
-	if( ::Indent_depth(lines[row - 1]) != ::Indent_depth(lines[row + 1]) ){
+	if( Indent_depth(lines[row - 1]) != Indent_depth(lines[row + 1]) ){
 		out.push_back({ row, 0, "9.4", "neighbors differ in indentation" });
 	}
 }
@@ -168,7 +174,7 @@ void Check_blank_line(
 //       아니라 오히려 금지다(§9.4). 다음 코드 행이 단어 머리일 때만 본다(연산자 머리는 그
 //       토큰의 경쟁 범위 검사가 맡는다).
 //     · 그 밖의 꼬리는 문장이 다른 자리에서 끝난다 — 관할 밖.
-void Check_close_open_blank_line(
+void sak::Check_close_open_blank_line(
 	Lines const &lines, Lines const &mask,
 	int const o_row, int const c_row, int const c_col, int const c_len, char const kind,
 	std::vector<Violation> &out
@@ -178,20 +184,20 @@ void Check_close_open_blank_line(
 	}
 
 	int const rows = static_cast<int>(lines.size());
-	int const o_ind = ::Indent_depth(lines[o_row]);
-	int const c_ind = ::Indent_depth(lines[c_row]);
+	int const o_ind = Indent_depth(lines[o_row]);
+	int const c_ind = Indent_depth(lines[c_row]);
 
 	if(o_row > 0){
 		int const nr = o_row - 1;
 		std::string const &above = mask[nr];
 
-		if( !::Is_blank_row(lines[nr]) && ::Has_code(above) && ::Indent_depth(lines[nr]) == o_ind ){
-			char const above_last = ::Last_code_char(above);
+		if( !Is_blank_row(lines[nr]) && Has_code(above) && Indent_depth(lines[nr]) == o_ind ){
+			char const above_last = Last_code_char(above);
 
 			bool const  
 				at_stmt_boundary
 				= (above_last == ';' || above_last == '}')
-				&& !::Continues_statement(mask[o_row], false)
+				&& !Continues_statement(mask[o_row], false)
 			;
 
 			if(at_stmt_boundary){
@@ -208,11 +214,11 @@ void Check_close_open_blank_line(
 	std::string const &below = mask[nr];
 
 	if(kind == '{'){
-		if( !::Is_blank_row(lines[nr]) && ::Has_code(below) && ::Indent_depth(lines[nr]) == c_ind ){
+		if( !Is_blank_row(lines[nr]) && Has_code(below) && Indent_depth(lines[nr]) == c_ind ){
 			bool const  
 				at_stmt_boundary
-				= !::Has_nonsemi_code_after(mask[c_row], c_col + c_len)
-				&& !::Continues_statement(below, true)
+				= !Has_nonsemi_code_after(mask[c_row], c_col + c_len)
+				&& !Continues_statement(below, true)
 			;
 
 			if(at_stmt_boundary){
@@ -223,9 +229,9 @@ void Check_close_open_blank_line(
 		return;
 	}
 
-	if( ::Stmt_ends_after(mask[c_row], c_col + c_len) ){
-		if( !::Is_blank_row(lines[nr]) && ::Has_code(below) && ::Indent_depth(lines[nr]) == c_ind ){
-			if( !::Continues_statement(below, true) ){
+	if( Stmt_ends_after(mask[c_row], c_col + c_len) ){
+		if( !Is_blank_row(lines[nr]) && Has_code(below) && Indent_depth(lines[nr]) == c_ind ){
+			if( !Continues_statement(below, true) ){
 				out.push_back({ c_row, 0, "9.4", "missing blank line below multi-line bracket" });
 			}
 		}
@@ -233,16 +239,16 @@ void Check_close_open_blank_line(
 		return;
 	}
 
-	if( ::Last_significant_col(mask[c_row]) == c_col + c_len - 1 && ::Is_blank_row(lines[nr]) ){
+	if( Last_significant_col(mask[c_row]) == c_col + c_len - 1 && Is_blank_row(lines[nr]) ){
 		bool crossed = false;
-		int const cont = ::Next_code_row_over_blanks(lines, mask, c_row, crossed);
+		int const cont = Next_code_row_over_blanks(lines, mask, c_row, crossed);
 
 		if(cont >= 0 && crossed){
-			int const cc = ::First_significant_col(mask[cont]);
+			int const cc = First_significant_col(mask[cont]);
 
-			if( cc >= 0 && ::is_word_char(mask[cont][cc]) ){
+			if( cc >= 0 && is_word_char(mask[cont][cc]) ){
 				for(int b = nr; b < cont; ++b){
-					if( ::Is_blank_row(lines[b]) ){
+					if( Is_blank_row(lines[b]) ){
 						out.push_back(
 							{ b, 0, "9.4", "blank line inside a break-competition range" }
 						);
@@ -253,16 +259,16 @@ void Check_close_open_blank_line(
 	}
 }
 
-void Check_bracket_blank_line(
+void sak::Check_bracket_blank_line(
 	Lines const &lines, Lines const &mask, Bk_pair const &p, std::vector<Violation> &out
 ){
-	::Check_close_open_blank_line(lines, mask, p.o_row, p.c_row, p.c_col, p.c_len, p.kind, out);
+	Check_close_open_blank_line(lines, mask, p.o_row, p.c_row, p.c_col, p.c_len, p.kind, out);
 }
 
 // §5.4 다중행 괄호의 위치·들여쓰기 검사.
 // (1) 여닫는 행 들여쓰기 동일, (2) 여는 괄호 다음 같은 행에 코드 토큰 없음(행 끝),
 // (3) 닫는 괄호 직전 같은 행에 코드 토큰 없음(행 처음), (4) 중간 코드 행의 들여쓰기 ≥ 외곽+1.
-void Check_multiline_bracket(
+void sak::Check_multiline_bracket(
 	Lines const &lines, Lines const &mask, Bk_pair const &p,
 	std::vector<Violation> &out
 ){
@@ -271,10 +277,10 @@ void Check_multiline_bracket(
 	}
 
 	// (1) 여닫는 행 들여쓰기 동일
-	int const o_ind = ::Indent_depth(lines[p.o_row]), c_ind = ::Indent_depth(lines[p.c_row]);
+	int const o_ind = Indent_depth(lines[p.o_row]), c_ind = Indent_depth(lines[p.c_row]);
 
 	if(o_ind != c_ind){
-		::Push_fix(
+		Push_fix(
 			out, { p.c_row, 0, "5.4", "open/close indent differ" },
 			Fix_kind::indent, 0, o_ind
 		);
@@ -285,7 +291,7 @@ void Check_multiline_bracket(
 	int const o_n = static_cast<int>(o_line.size()), o_end = p.o_col + p.o_len;
 
 	for(int cc = o_end; cc < o_n; ++cc){
-		if( ::Is_code_char(o_line[cc]) ){
+		if( Is_code_char(o_line[cc]) ){
 			out.push_back({ p.o_row, cc, "5.4", "opening bracket not last token" });
 
 			break;
@@ -296,7 +302,7 @@ void Check_multiline_bracket(
 	std::string const &c_line = mask[p.c_row];
 
 	for(int cc = 0; cc < p.c_col; ++cc){
-		if( ::Is_code_char(c_line[cc]) ){
+		if( Is_code_char(c_line[cc]) ){
 			out.push_back({ p.c_row, cc, "5.4", "closing bracket not first token" });
 
 			break;
@@ -307,11 +313,11 @@ void Check_multiline_bracket(
 	// 단 §5.6 숨은 중괄호로 닫혔다 열리는 자리 — case/default/public/private/protected —
 	// 는 외곽과 같은 들여쓰기가 정상이므로 검사 제외한다.
 	for(int r = p.o_row + 1; r < p.c_row; ++r){
-		if( lines[r].empty() || !::Has_code(mask[r]) ){
+		if( lines[r].empty() || !Has_code(mask[r]) ){
 			continue;
 		}
 
-		int const ind = ::Indent_depth(lines[r]);
+		int const ind = Indent_depth(lines[r]);
 
 		std::string const &m = mask[r];
 		int first = 0;
@@ -321,7 +327,7 @@ void Check_multiline_bracket(
 			++first;
 		}
 
-		std::string const head = first < m_n ? ::Word_at(m, first) : "";
+		std::string const head = first < m_n ? Word_at(m, first) : "";
 
 		bool const  
 			hidden_close
@@ -344,7 +350,7 @@ void Check_multiline_bracket(
 		}
 
 		if(ind < o_ind + 1){
-			::Push_fix(
+			Push_fix(
 				out, { r, 0, "5.4", "middle line indent insufficient" },
 				Fix_kind::indent, 0, o_ind + 1
 			);
@@ -355,14 +361,14 @@ void Check_multiline_bracket(
 // §5.6 숨은 중괄호 — case/default/접근지정자(public/private/protected) 라인은
 // 그 라인을 *직접 둘러싼 가장 안쪽 `{ }` brace* 와 같은 들여쓰기여야 한다.
 // 외곽 함수 본체나 namespace 본체와의 들여쓰기는 비교 대상이 아니다.
-void Check_hidden_brace(
+void sak::Check_hidden_brace(
 	Lines const &lines, Lines const &mask,
 	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 ){
 	int const rows = static_cast<int>(lines.size());
 
 	for(int r = 0; r < rows; ++r){
-		if( int head_col = 0; !::Label_row(mask, r, head_col) ){
+		if( int head_col = 0; !Label_row(mask, r, head_col) ){
 			continue;
 		}
 
@@ -382,10 +388,10 @@ void Check_hidden_brace(
 			continue;
 		}
 
-		int const r_ind = ::Indent_depth(lines[r]), o_ind = ::Indent_depth(lines[inner->o_row]);
+		int const r_ind = Indent_depth(lines[r]), o_ind = Indent_depth(lines[inner->o_row]);
 
 		if(r_ind != o_ind){
-			::Push_fix(
+			Push_fix(
 				out, { r, 0, "5.6", "hidden close: indent must equal enclosing brace" },
 				Fix_kind::indent, 0, o_ind
 			);
@@ -398,14 +404,14 @@ void Check_hidden_brace(
 		int p = r - 1;
 		int blanks = 0;
 
-		while( p >= 0 && ::Is_blank_row(lines[p]) ){
+		while( p >= 0 && Is_blank_row(lines[p]) ){
 			++blanks;
 			--p;
 		}
 
-		if( p >= inner->o_row && ::Has_code(mask[p]) ){
+		if( p >= inner->o_row && Has_code(mask[p]) ){
 			int hc = 0;
-			bool const empty_section = p == inner->o_row || ::Label_row(mask, p, hc);
+			bool const empty_section = p == inner->o_row || Label_row(mask, p, hc);
 			int const want = empty_section ? 0 : 1;
 
 			if(blanks != want){
@@ -424,7 +430,7 @@ void Check_hidden_brace(
 
 // §4.3 다중행 [[ ]] 의 닫는 ']]' 뒤에 피연산 토큰(단어)이 이어지면 `▽` 가 개행하므로 ']]' 가
 // 행 마지막 토큰이어야 한다. 부착·종결 토큰은 `▽` 자리가 아니라 침묵(단어만 위반).
-void Check_attribute_close(
+void sak::Check_attribute_close(
 	Lines const &mask, Bk_pair const &p, std::vector<Violation> &out
 ){
 	if(p.kind != 'A' || p.o_row == p.c_row){
@@ -435,8 +441,8 @@ void Check_attribute_close(
 	int const c_n = static_cast<int>(c_line.size()), c_end = p.c_col + p.c_len;
 
 	for(int cc = c_end; cc < c_n; ++cc){
-		if( ::Is_code_char(c_line[cc]) ){
-			if( ::is_word_char(c_line[cc]) ){
+		if( Is_code_char(c_line[cc]) ){
+			if( is_word_char(c_line[cc]) ){
 				out.push_back(
 					{ p.c_row, cc, "4.3", "']]' before an operand: it must end the line" }
 				);
