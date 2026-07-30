@@ -24,9 +24,12 @@ file(GLOB APP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/app/*.cpp)
 
 add_executable(sak ${APP_SOURCES})
 
-# 소스를 UTF-8 로 읽도록 한다(한글 주석에 대한 MSVC C4819 경고 제거).
+# 경고는 엄격하게, 그리고 오류로 승격한다. MSVC 는 /W4, GCC/Clang 은 그 상당 조합.
+# (/utf-8 은 한글 주석에 대한 MSVC C4819 경고 제거.)
 if(MSVC)
-	target_compile_options(sak PRIVATE /utf-8)
+	target_compile_options(sak PRIVATE /utf-8 /W4 /WX)
+else()
+	target_compile_options(sak PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 # How2use 기반 sak 테스트 스위트(test/). 기본은 꺼 둔다 — 평소 sak 빌드/설치 경로를 건드리지 않는다.
