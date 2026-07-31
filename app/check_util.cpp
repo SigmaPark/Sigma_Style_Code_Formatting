@@ -333,16 +333,40 @@ auto sak::Next_code_row_over_blanks(
 	return -1;
 }
 
-// 선두 탭 개수 = 들여쓰기 깊이.
-auto sak::Indent_depth(std::string const &line)->int{
+// 행 머리에서 위치 p 가 여는 들여쓰기 단위의 문자 길이 — 탭은 1, 공백 4칸은 4(§8.2 등가),
+// 단위가 아니면 0. 이 하나로 §1.3 Check_indent 와 아래 Indent_depth 가 같은 눈을 공유한다.
+auto sak::Indent_unit_at(std::string const &line, int const p)->int{
 	int const n = static_cast<int>(line.size());
-	int p = 0;
 
-	while(p < n && line[p] == '\t'){
-		++p;
+	if(p < n && line[p] == '\t'){
+		return 1;
 	}
 
-	return p;
+	int run = 0;
+
+	while(p + run < n && run < 4 && line[p + run] == ' '){
+		++run;
+	}
+
+	return run == 4 ? 4 : 0;
+}
+
+// 들여쓰기 깊이 = 행 머리를 채우는 들여쓰기 단위(탭 하나 또는 공백 4칸)의 개수.
+auto sak::Indent_depth(std::string const &line)->int{
+	int p = 0, depth = 0;
+
+	while(true){
+		int const len = Indent_unit_at(line, p);
+
+		if(len == 0){
+			break;
+		}
+
+		++depth;
+		p += len;
+	}
+
+	return depth;
 }
 
 // 마스크상 코드 토큰을 하나라도 포함하는 행인지(전처리기·주석·문자열 only 는 false).

@@ -65,6 +65,7 @@ auto wt::Tests(wchar_t const * const module_title) noexcept->bool{
 #include "cases/Test_Blank_Line.hpp"
 #include "cases/Test_Label_Rhythm.hpp"
 #include "cases/Test_Silent_Cases.hpp"
+#include "cases/Test_Indent.hpp"
 
 static auto Test()->void{
 	sakt::Test_Control_Brace::test();
@@ -85,6 +86,7 @@ static auto Test()->void{
 	sakt::Test_Blank_Line::test();
 	sakt::Test_Label_Rhythm::test();
 	sakt::Test_Silent_Cases::test();
+	sakt::Test_Indent::test();
 }
 
 auto main(int const, char const * const *)->int{

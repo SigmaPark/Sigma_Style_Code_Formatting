@@ -26,7 +26,8 @@ void sak::Check_width(std::string const &line, int const row, std::vector<Violat
 	}
 }
 
-// §1.3 들여쓰기에 공백 (raw 행). 공행의 백문자는 들여쓰기가 아니므로(§9.4) 건너뛴다.
+// §1.3 들여쓰기 (raw 행) — 행 머리는 들여쓰기 단위(탭 하나 또는 공백 4칸, §8.2)의 나열이다.
+// 단위에 못 든 남은 공백(1~3칸)은 위반. 공행은 들여쓰기가 아니므로(§9.4) 건너뛴다.
 void sak::Check_indent(std::string const &line, int const row, std::vector<Violation> &out){
 	if( Is_blank_row(line) ){
 		return;
@@ -35,8 +36,14 @@ void sak::Check_indent(std::string const &line, int const row, std::vector<Viola
 	int const n = static_cast<int>(line.size());
 	int p = 0;
 
-	while(p < n && line[p] == '\t'){
-		++p;
+	while(true){
+		int const len = Indent_unit_at(line, p);
+
+		if(len == 0){
+			break;
+		}
+
+		p += len;
 	}
 
 	if(p < n && line[p] == ' '){
@@ -49,7 +56,7 @@ void sak::Check_indent(std::string const &line, int const row, std::vector<Viola
 // 4연속+는 §8.2 Check_space_run, 꼬리 탭은 §8.2 Check_tab_use 가 각각 담당하므로
 // §8.3 는 별도 후행-공백 검사를 두지 않는다.
 
-// §8.2 들여쓰기 이외 용도의 탭 (@마스크). 선두 들여쓰기 탭 이후의 탭은 위반.
+// §8.2 들여쓰기 이외 용도의 탭 (@마스크). 행 머리(탭·공백 4칸이 섞일 수 있다) 이후의 탭은 위반.
 void sak::Check_tab_use(std::string const &mask, int const row, std::vector<Violation> &out){
 	if( Is_blank_row(mask) ){
 		return;
@@ -58,7 +65,7 @@ void sak::Check_tab_use(std::string const &mask, int const row, std::vector<Viol
 	int const n = static_cast<int>(mask.size());
 	int p = 0;
 
-	while(p < n && mask[p] == '\t'){
+	while( p < n && (mask[p] == '\t' || mask[p] == ' ') ){
 		++p;
 	}
 

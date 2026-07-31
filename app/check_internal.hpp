@@ -63,6 +63,7 @@ namespace sak{
 	auto Is_blank_row(std::string const &line)->bool;
 	auto Is_code_char(char const ch)->bool;
 	auto Has_code(std::string const &mask_row)->bool;
+	auto Indent_unit_at(std::string const &line, int const p)->int;
 	auto Indent_depth(std::string const &line)->int;
 	auto Last_significant_col(std::string const &mask_row)->int;
 	auto First_significant_col(std::string const &mask_row)->int;
