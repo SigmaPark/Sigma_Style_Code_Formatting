@@ -123,3 +123,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Label_Rhythm, /**/){
 	::Rhythm_firstlabel_bad,
 	::Fallthrough_ok
 };
+

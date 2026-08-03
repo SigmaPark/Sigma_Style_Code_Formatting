@@ -83,3 +83,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Multiline_Bracket, /**/){
 	::Multiline_clean_2,
 	::Close_not_first_2
 };
+

@@ -107,3 +107,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Spacing, /**/){
 	::Call_clean,
 	::Call_spaced_paren_2
 };
+

@@ -178,3 +178,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Inline_Type, /**/){
 	::Cbracket_shield_ok,
 	::Angle_decl_glued_bad
 };
+

@@ -59,3 +59,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Operator_Name, /**/){
 	::Call_operator,
 	::Subscript_operator
 };
+

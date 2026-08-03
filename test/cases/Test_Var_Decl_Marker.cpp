@@ -48,3 +48,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Var_Decl_Marker, /**/){
 	::Type_blank_bad,
 	::Word_word_bad
 };
+

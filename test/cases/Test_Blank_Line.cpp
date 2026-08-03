@@ -211,3 +211,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Blank_Line, /**/){
 	::Vop_gap_bad,
 	::Vop_continuation_ok
 };
+

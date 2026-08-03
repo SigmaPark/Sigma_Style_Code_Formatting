@@ -88,3 +88,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Comment_Tail, /**/){
 	::Padding_before_comment,
 	::Padding_inside_comment
 };
+

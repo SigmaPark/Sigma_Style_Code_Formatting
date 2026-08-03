@@ -95,3 +95,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Bracket_Adjacency, /**/){
 	::Words_padded,
 	::Words_clean
 };
+

@@ -10,3 +10,4 @@
 namespace sakt{
 	H2U_HOW2USE_CLASS(Test_, Multiline_Bracket, /**/);
 }
+

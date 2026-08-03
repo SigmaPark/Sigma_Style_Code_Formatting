@@ -187,3 +187,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Clause_Cohesion, /**/){
 	::Comment_else_ok,
 	::Plain_while_ok
 };
+

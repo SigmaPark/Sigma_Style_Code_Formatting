@@ -1399,3 +1399,4 @@ void sak::Check_suspects(std::vector<Adj_tok> const &toks, std::vector<Violation
 		out.push_back(v);
 	}
 }
+

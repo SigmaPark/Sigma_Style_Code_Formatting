@@ -33,3 +33,4 @@ struct sak::Segment{
 	int row, col;   // 0-기준 행, 행 내 시작 열(바이트)
 	int len;   // 바이트 길이
 };
+

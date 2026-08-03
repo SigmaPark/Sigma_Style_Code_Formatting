@@ -566,3 +566,4 @@ auto sak::Continues_statement(std::string const &mask_line, bool const with_whil
 		|| ( with_while && Starts_with_keyword(mask_line, "while") )
 	;
 }
+

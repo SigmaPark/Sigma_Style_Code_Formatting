@@ -67,3 +67,4 @@ struct sak::Edit_result{
 	std::vector<Edit_note> notes;
 	bool ok;
 };
+

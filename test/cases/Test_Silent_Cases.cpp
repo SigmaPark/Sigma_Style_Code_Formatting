@@ -193,3 +193,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Silent_Cases, /**/){
 	::Brace_comma_args_ok,
 	::Fingerprint_ok
 };
+

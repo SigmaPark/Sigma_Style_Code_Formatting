@@ -452,3 +452,4 @@ void sak::Check_attribute_close(
 		}
 	}
 }
+

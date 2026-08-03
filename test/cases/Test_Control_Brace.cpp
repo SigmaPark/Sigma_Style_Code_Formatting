@@ -71,3 +71,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Control_Brace, /**/){
 	::While_without_brace,
 	::For_multiline_clean
 };
+

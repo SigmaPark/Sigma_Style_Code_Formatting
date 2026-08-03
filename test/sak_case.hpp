@@ -59,3 +59,4 @@ namespace sakt{
 		std::wstring const &title, Lines const &snippet, std::vector<Violation> const &got
 	)->void;
 }
+

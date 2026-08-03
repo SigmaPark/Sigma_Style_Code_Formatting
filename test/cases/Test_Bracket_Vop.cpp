@@ -70,3 +70,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Bracket_Vop, /**/){
 	::Angle_attach_ok,
 	::Attr_word_bad
 };
+

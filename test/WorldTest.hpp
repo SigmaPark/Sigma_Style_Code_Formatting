@@ -8,3 +8,4 @@
 namespace wt{
 	auto Tests(wchar_t const *module_title) noexcept->bool;
 }
+

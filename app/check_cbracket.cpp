@@ -1110,3 +1110,4 @@ void sak::Check_anchor_var_decl_marker(
 		);
 	}
 }
+

@@ -115,3 +115,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, String_Splice, /**/){
 	::Splice_return_ok,
 	::Splice_vardecl_ok
 };
+

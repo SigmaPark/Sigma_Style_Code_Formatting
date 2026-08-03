@@ -94,3 +94,4 @@ H2U_HOW2USE_TESTS(sakt::Test_, Indent, /**/){
 	::Comment_line_ok,
 	::All_tab_ok
 };
+

@@ -908,3 +908,4 @@ void sak::Check_angle_inner_space(
 		);
 	}
 }
+
