@@ -57,15 +57,15 @@ auto sak::check_lines(
 		Check_bracket_blank_line(lines, mask, p, out);
 	}
 
-	Check_hidden_brace(lines, mask, pairs, out);
+	Check_virtual_brace(lines, mask, pairs, out);
 	Check_anchor_keyword_semicolon(lines, mask, out);
 	Check_anchor_trailing_return(lines, mask, out);
 	Check_anchor_inline_type(cut_lines, cut_mask, pairs, out);
 	Check_declarator_expansion_brace(mask, pairs, out);
 	Check_anchor_case(lines, mask, out);
-	Check_anchor_colon_vbracket(lines, mask, out);
+	Check_anchor_colon_cbracket(lines, mask, out);
 	Check_anchor_var_decl_marker(cut_lines, cut_mask, out);
-	Check_vbracket_blank_line(lines, mask, cut_mask, pairs, out);
+	Check_cbracket_blank_line(lines, mask, cut_mask, pairs, out);
 
 	// 표기 판정 — 꺾쇠 검사보다 먼저 돌린다. 꺾쇠의 정체는 이제 표기가 판정하기 때문이다.
 	std::vector<Adj_tok> toks = Tokenize_file(mask, segs);

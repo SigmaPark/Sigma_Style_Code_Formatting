@@ -9,7 +9,7 @@
 #include <vector>
 
 namespace sak{
-	// 콜론 가상 괄호의 두 갈래 — 상속·enum 기반 타입 지정이냐, 생성자 멤버초기화 리스트냐.
+	// 콜론 낫괄호의 두 갈래 — 상속·enum 기반 타입 지정이냐, 생성자 멤버초기화 리스트냐.
 	enum class Colon_vb_kind{ inherit_or_enum, ctor_init };
 
 	static auto Next_code_row(Lines const &lines, Lines const &mask, int const from)->int;
@@ -23,7 +23,7 @@ namespace sak{
 		std::vector<Violation> &out
 	);
 
-	static void Check_colon_vbracket_layout(
+	static void Check_colon_cbracket_layout(
 		Lines const &lines, Lines const &mask,
 		int const a_row, int const a_col, Colon_vb_kind const kind,
 		std::vector<Violation> &out
@@ -108,7 +108,7 @@ void sak::Push_anchor_indent_check(
 	}
 }
 
-// §5.5 가상괄호 — return/throw/using 앵커 (같은 구조: 여는 키워드 ~ 닫는 ';').
+// §5.5 낫괄호 — return/throw/using 앵커 (같은 구조: 여는 키워드 ~ 닫는 ';').
 // 세 조건 검사: (a) 여는 키워드가 행 마지막 코드 토큰인지, (b) 짝 ';' 가 그 행 첫 코드
 // 토큰인지, (c) 다음 코드 행 들여쓰기 ≥ cur+1 (내용 +1). 세 키워드는 정본 §5.5 표에서
 // 동일 구조(open=keyword, close=';')이므로 단일 매처로 통합. 그 외 앵커(`->`·`case`·
@@ -143,7 +143,7 @@ void sak::Check_anchor_keyword_semicolon(
 			int close_row = -1, close_col = -1;
 			Find_stmt_semi(mask, r, e, close_row, close_col);
 
-			// 같은 행에서 ; 를 찾았으면 단일행 return/throw — 가상괄호 미발현.
+			// 같은 행에서 ; 를 찾았으면 단일행 return/throw — 낫괄호 미발현.
 			if(close_row == r){
 				c = e;
 
@@ -179,11 +179,11 @@ void sak::Check_anchor_keyword_semicolon(
 
 			// 여는 키워드가 행 마지막일 때에만 다음 행 들여쓰기를 검사한다.
 			// (키워드 뒤에 표현식이 이어지는 형태는 위 (a) 가 이미 잡았고,
-			//  그 경우 "다음 코드 행"이 가상괄호 내용의 첫 행이 아니라
+			//  그 경우 "다음 코드 행"이 낫괄호 내용의 첫 행이 아니라
 			//  중간 괄호의 닫는 행이 될 수 있어 위양성 위험.)
 			if(keyword_last){
 				Push_anchor_indent_check(
-					lines, mask, r, "virtual bracket: continuation underindented", out
+					lines, mask, r, "corner bracket: continuation underindented", out
 				);
 			}
 
@@ -192,9 +192,9 @@ void sak::Check_anchor_keyword_semicolon(
 	}
 }
 
-// §5.5 후행반환 `->` 가상괄호.
+// §5.5 후행반환 `->` 낫괄호.
 // `->` 직전 비공백이 `)` 이면 후행반환 자리로 본다. 같은 행에 `{` 또는 `;` 가 (괄호 깊이 0)
-// 없으면 다중행 가상괄호 발현 — 다음 코드 행 들여쓰기 ≥ `->` 행 +1.
+// 없으면 다중행 낫괄호 발현 — 다음 코드 행 들여쓰기 ≥ `->` 행 +1.
 void sak::Check_anchor_trailing_return(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
@@ -249,7 +249,7 @@ void sak::Check_anchor_trailing_return(
 			}
 
 			Push_anchor_indent_check(
-				lines, mask, r, "virtual bracket: continuation underindented", out
+				lines, mask, r, "corner bracket: continuation underindented", out
 			);
 		}
 	}
@@ -306,9 +306,9 @@ auto sak::Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool{
 	return false;
 }
 
-// §5.5 인라인 타입 정의 가상괄호 — `struct{…}『var…』;` 패턴.
+// §5.5 인라인 타입 정의 낫괄호 — `struct{…}『var…』;` 패턴.
 // 매처 결과의 `{ }` 짝 중 인라인 타입 정의의 close 인 것을 골라, close `}` 가 행 마지막이고
-// 다음 코드 행이 식별자로 시작하면 다중행 가상괄호 발현 — 다음 코드 행 들여쓰기 ≥ `}` 행 +1.
+// 다음 코드 행이 식별자로 시작하면 다중행 낫괄호 발현 — 다음 코드 행 들여쓰기 ≥ `}` 행 +1.
 // 이 자리는 sak 이 마커 없이도 구조를 확정하므로, v2.10 의무 2칸 마커의 누락·오개수(≠2)까지
 // 위양성 0 으로 잡아 자동삽입한다(일반 변수선언 자리와 달리).
 void sak::Check_anchor_inline_type(
@@ -394,7 +394,7 @@ void sak::Check_anchor_inline_type(
 	}
 }
 
-// §5.5 case 라벨 가상괄호.
+// §5.5 case 라벨 낫괄호.
 // `case` 단어 같은 행에 (괄호 깊이 0, `::` 제외) `:` 없으면 다중행 발현 —
 // 다음 코드 행 들여쓰기 ≥ `case` 행 +1.
 void sak::Check_anchor_case(
@@ -453,7 +453,7 @@ void sak::Check_anchor_case(
 
 			if(!found){
 				Push_anchor_indent_check(
-					lines, mask, r, "virtual bracket: continuation underindented", out
+					lines, mask, r, "corner bracket: continuation underindented", out
 				);
 			}
 
@@ -462,14 +462,14 @@ void sak::Check_anchor_case(
 	}
 }
 
-// §5.5 콜론 가상괄호 — 상속·enum 기반 타입·생성자 init list 세 자리 공통 레이아웃 검사.
+// §5.5 콜론 낫괄호 — 상속·enum 기반 타입·생성자 init list 세 자리 공통 레이아웃 검사.
 // 앵커 ':' 위치를 받아, 짝지어질 body '{' 를 전방 스캔으로 찾고, 다중행이면 세 조건 검사:
 //   (a) ':' 이 여는 행 마지막 코드 토큰인지
 //   (b) '{' 이 닫는 행 첫 코드 토큰인지
 //   (c) 사이 첫 코드 행 들여쓰기 ≥ ind(':') + 1
 // ctor init 자리에선 'mem_{val}' 형태의 braced-init 를 body '{' 로 오인하지 않도록,
 // '{' 직전 코드 문자가 식별자면 braced-init 로 간주해 짝 '}' 까지 skip.
-void sak::Check_colon_vbracket_layout(
+void sak::Check_colon_cbracket_layout(
 	Lines const &lines, Lines const &mask,
 	int const a_row, int const a_col, Colon_vb_kind const kind,
 	std::vector<Violation> &out
@@ -585,7 +585,7 @@ void sak::Check_colon_vbracket_layout(
 		if( Is_code_char(am[cc]) ){
 			colon_last = false;
 
-			out.push_back({ a_row, cc, "5.5", "colon vbracket: ':' not last" });
+			out.push_back({ a_row, cc, "5.5", "colon cbracket: ':' not last" });
 
 			break;
 		}
@@ -597,7 +597,7 @@ void sak::Check_colon_vbracket_layout(
 	for(int cc = 0; cc < close_col; ++cc){
 		if( Is_code_char(cm[cc]) ){
 			out.push_back(
-				{ close_row, cc, "5.5", "colon vbracket: '{' not first" }
+				{ close_row, cc, "5.5", "colon cbracket: '{' not first" }
 			);
 
 			break;
@@ -626,13 +626,13 @@ void sak::Check_colon_vbracket_layout(
 
 	if( Indent_depth(lines[nr]) < cur + 1 ){
 		Push_fix(
-			out, { nr, 0, "5.5", "colon vbracket: content underindented" },
+			out, { nr, 0, "5.5", "colon cbracket: content underindented" },
 			Fix_kind::indent, 0, cur + 1
 		);
 	}
 }
 
-// §5.5 콜론 가상괄호 스캐너 (A) — 상속·enum 기반 타입.
+// §5.5 콜론 낫괄호 스캐너 (A) — 상속·enum 기반 타입.
 // class/struct/union/enum 키워드 앵커에서 전방 스캔, (), <>, [] 깊이 추적으로
 // depth-0 ':' 이 나오면 앵커 확정. 앞서 '{' 나 ';' 을 만나면 무시 (본체 시작 or 전방 선언).
 void sak::Scan_type_decl_colon(
@@ -731,7 +731,7 @@ void sak::Scan_type_decl_colon(
 			}
 
 			if(colon_row >= 0){
-				Check_colon_vbracket_layout(
+				Check_colon_cbracket_layout(
 					lines, mask, colon_row, colon_col,
 					Colon_vb_kind::inherit_or_enum, out
 				);
@@ -742,7 +742,7 @@ void sak::Scan_type_decl_colon(
 	}
 }
 
-// §5.5 콜론 가상괄호 스캐너 (B) — 생성자 멤버초기화 리스트.
+// §5.5 콜론 낫괄호 스캐너 (B) — 생성자 멤버초기화 리스트.
 // ':' 좌측 근접 코드 문자가 ')' 이고, 문장 시작부터 여기까지 '?' 스택이 balanced 면 ctor init.
 // 문장 시작 = 역방향으로 depth-0 의 ';' / '{' / '}' 를 만난 지점 (또는 파일 시작).
 void sak::Scan_ctor_init_colon(
@@ -881,29 +881,29 @@ void sak::Scan_ctor_init_colon(
 				continue;
 			}
 
-			Check_colon_vbracket_layout(
+			Check_colon_cbracket_layout(
 				lines, mask, r, c, Colon_vb_kind::ctor_init, out
 			);
 		}
 	}
 }
 
-// §5.5 콜론 가상괄호 — 두 스캐너 병치 진입점.
-void sak::Check_anchor_colon_vbracket(
+// §5.5 콜론 낫괄호 — 두 스캐너 병치 진입점.
+void sak::Check_anchor_colon_cbracket(
 	Lines const &lines, Lines const &mask, std::vector<Violation> &out
 ){
 	Scan_type_decl_colon(lines, mask, out);
 	Scan_ctor_init_colon(lines, mask, out);
 }
 
-// §5.5 변수 선언문 가상괄호 — 의무화된 2칸 마커로 반자동 감지 (v2.10: 마커는 권장이 아니라
+// §5.5 변수 선언문 낫괄호 — 의무화된 2칸 마커로 반자동 감지 (v2.10: 마커는 권장이 아니라
 // 의무). 마지막 top-notorious(vexing parse)라 파서 없이는 잡기 어려운 자리를, 사용자가 놓은
 // "타입 끝·개행 직전 잉여공백 2칸"(§5.5)을 신뢰하고 닫는 `;` 로 재검증해 잡는다. 마커 자체의
 // 누락은 (인라인 타입 자리를 뺀) 일반 변수선언에선 sak 이 구조를 확정 못 해 감지 불가 —
 // 서브에이전트가 채운다. sak 은 마커가 있을 때 그 레이아웃만 검증한다.
 // 판정: 어떤 행이 (마스크 기준) 정확히 공백 2칸으로 끝나고, 그 앞 마지막 코드 문자가 타입
-// 표현의 꼬리로 볼 수 있으면(‹`; { } ) ] , ( [`› 아님) 여는 가상괄호 후보. 후보부터 통합
-// 깊이 추적으로 depth-0 `;`(중첩 `()[]{}`·람다 본문 skip)을 찾으면 변수선언 가상괄호로 확정.
+// 표현의 꼬리로 볼 수 있으면(‹`; { } ) ] , ( [`› 아님) 여는 낫괄호 후보. 후보부터 통합
+// 깊이 추적으로 depth-0 `;`(중첩 `()[]{}`·람다 본문 skip)을 찾으면 변수선언 낫괄호로 확정.
 // 확정 시 §5.5 레이아웃을 검사한다: (a) 타입이 마커 행 마지막 — 마커가 보장하므로 생략,
 // (b) `;` 이 닫는 행 첫 코드 토큰, (c) 이음줄 들여쓰기 ≥ 마커 행 +1. 미확정이면 조용히 넘긴다
 // (무해한 거짓음성 → 서브에이전트 폴백). 위양성 0 계약은 사용자 표식을 신뢰하는 형태로 지킨다.
@@ -946,16 +946,16 @@ auto sak::Marker_decl_close_row(Lines const &mask, int const r)->int{
 	return vclose ? close_row : -1;
 }
 
-// §9.4 — 다중행 가상 괄호(§5.5)도 다중행 괄호와 같은 공행 봉투를 요구한다(§5 서두 — 가상
+// §9.4 — 다중행 낫괄호(§5.5)도 다중행 괄호와 같은 공행 봉투를 요구한다(§5 서두 — 가상
 // 괄호도 괄호류). 렉서가 원문에서 확정할 수 있는 자리만 본다(위양성 0 원칙).
 //   · 여는 행(위쪽) — return/throw/using 이 행 끝에 홀로 선 행(『 가 행 끝에서 열린다),
 //     그리고 변수 선언문의 2칸 마커 행. 위 인접 행이 같은 깊이의 문장 종결(`;`·`}`)이면
 //     그 사이엔 공행이 필수다.
-//   · 닫는 행(아래쪽) — 전개된 가상 괄호의 종결 `;` 홀로 행(직전 코드 행이 한 단계 깊은
+//   · 닫는 행(아래쪽) — 전개된 낫괄호의 종결 `;` 홀로 행(직전 코드 행이 한 단계 깊은
 //     전개 내용일 때만 — 홀로 선 빈 문장 `;` 과 가른다). 아래 인접 행이 같은 깊이의 코드면
 //     그 사이엔 공행이 필수다.
 // 다중행 소괄호·첨자·속성 안은 문장이 아니라 이음줄이라 제외한다(`for` 머리의 `;` 포함).
-void sak::Check_vbracket_blank_line(
+void sak::Check_cbracket_blank_line(
 	Lines const &lines, Lines const &mask, Lines const &cut_mask,
 	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 ){
@@ -1019,7 +1019,7 @@ void sak::Check_vbracket_blank_line(
 
 			if(collides){
 				out.push_back(
-					{ r, 0, "9.4", "missing blank line above multi-line virtual bracket" }
+					{ r, 0, "9.4", "missing blank line above multi-line corner bracket" }
 				);
 			}
 		}
@@ -1046,7 +1046,7 @@ void sak::Check_vbracket_blank_line(
 
 			if(collides){
 				out.push_back(
-					{ r, 0, "9.4", "missing blank line below multi-line virtual bracket" }
+					{ r, 0, "9.4", "missing blank line below multi-line corner bracket" }
 				);
 			}
 		}
@@ -1088,7 +1088,7 @@ void sak::Check_anchor_var_decl_marker(
 		int close_row = -1, close_col = -1;
 		Find_stmt_semi(mask, r, t, close_row, close_col);
 
-		// 짝 `;` 를 못 찾았거나 같은 행이면 변수선언 가상괄호로 확정하지 않는다.
+		// 짝 `;` 를 못 찾았거나 같은 행이면 변수선언 낫괄호로 확정하지 않는다.
 		if(close_row <= r){
 			continue;
 		}

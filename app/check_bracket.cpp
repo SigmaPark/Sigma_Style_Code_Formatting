@@ -10,7 +10,7 @@
 
 namespace sak{
 	static auto Is_empty_pair(std::string const &line, int const from, int const to)->bool;
-	static auto Is_hidden_gap_row(Lines const &lines, Lines const &mask, int const r)->bool;
+	static auto Is_virtual_gap_row(Lines const &lines, Lines const &mask, int const r)->bool;
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
@@ -111,9 +111,9 @@ auto sak::Match_brackets(Lines const &mask)->std::vector<Bk_pair>{
 // 들여쓰기 비교는 인접 행이 "코드 토큰을 포함하는 행"일 때만 의미가 있다.
 // 인접 행이 전처리 본문(§2 제외 — `\` 연장 행 포함)·주석 only·문자열 only 면
 // 그 행의 raw 들여쓰기는 spec 상 들여쓰기가 아니므로 비교 대상에서 뺀다.
-// 행 R 이 닫는 숨은 중괄호 `⦄▽` 의 자리(물리적 빈 행)인가 — 공행이고, 아래로 공행을 건너 만나는
+// 행 R 이 닫는 가상 중괄호 `⦄▽` 의 자리(물리적 빈 행)인가 — 공행이고, 아래로 공행을 건너 만나는
 // 첫 비공행이 라벨 행이면 그렇다. 이 자리의 공행은 §5.6 리듬이 관할하므로 §9.4 형상 검사에서 뺀다.
-auto sak::Is_hidden_gap_row(Lines const &lines, Lines const &mask, int const r)->bool{
+auto sak::Is_virtual_gap_row(Lines const &lines, Lines const &mask, int const r)->bool{
 	if( !Is_blank_row(lines[r]) ){
 		return false;
 	}
@@ -137,7 +137,7 @@ void sak::Check_blank_line(
 		return;
 	}
 
-	if( Is_hidden_gap_row(lines, mask, row) ){
+	if( Is_virtual_gap_row(lines, mask, row) ){
 		return; // §5.6 리듬 관할 — ⦄▽ 자리의 공행
 	}
 
@@ -310,7 +310,7 @@ void sak::Check_multiline_bracket(
 	}
 
 	// (4) 중간 코드 행 들여쓰기 ≥ 외곽+1.
-	// 단 §5.6 숨은 중괄호로 닫혔다 열리는 자리 — case/default/public/private/protected —
+	// 단 §5.6 가상 중괄호로 닫혔다 열리는 자리 — case/default/public/private/protected —
 	// 는 외곽과 같은 들여쓰기가 정상이므로 검사 제외한다.
 	for(int r = p.o_row + 1; r < p.c_row; ++r){
 		if( lines[r].empty() || !Has_code(mask[r]) ){
@@ -330,14 +330,14 @@ void sak::Check_multiline_bracket(
 		std::string const head = first < m_n ? Word_at(m, first) : "";
 
 		bool const  
-			hidden_close
+			virtual_close
 			= head == "case" || head == "default"
 			|| head == "public" || head == "private" || head == "protected"
 		;
 
-		// §5.6 숨은 중괄호 자리(case/default/접근지정자)는 +1 룰을 적용하지 않는다.
-		// 들여쓰기는 가장 안쪽 brace 와 비교해야 정확하므로 Check_hidden_brace 가 다룬다.
-		if(hidden_close){
+		// §5.6 가상 중괄호 자리(case/default/접근지정자)는 +1 룰을 적용하지 않는다.
+		// 들여쓰기는 가장 안쪽 brace 와 비교해야 정확하므로 Check_virtual_brace 가 다룬다.
+		if(virtual_close){
 			continue;
 		}
 
@@ -358,10 +358,10 @@ void sak::Check_multiline_bracket(
 	}
 }
 
-// §5.6 숨은 중괄호 — case/default/접근지정자(public/private/protected) 라인은
+// §5.6 가상 중괄호 — case/default/접근지정자(public/private/protected) 라인은
 // 그 라인을 *직접 둘러싼 가장 안쪽 `{ }` brace* 와 같은 들여쓰기여야 한다.
 // 외곽 함수 본체나 namespace 본체와의 들여쓰기는 비교 대상이 아니다.
-void sak::Check_hidden_brace(
+void sak::Check_virtual_brace(
 	Lines const &lines, Lines const &mask,
 	std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 ){
@@ -392,12 +392,12 @@ void sak::Check_hidden_brace(
 
 		if(r_ind != o_ind){
 			Push_fix(
-				out, { r, 0, "5.6", "hidden close: indent must equal enclosing brace" },
+				out, { r, 0, "5.6", "virtual close: indent must equal enclosing brace" },
 				Fix_kind::indent, 0, o_ind
 			);
 		}
 
-		// §5.6 리듬 — 닫는 숨은 중괄호 `⦄▽` 는 물리적으로 빈 행이다. 라벨 위의 공행 수를 세어,
+		// §5.6 리듬 — 닫는 가상 중괄호 `⦄▽` 는 물리적으로 빈 행이다. 라벨 위의 공행 수를 세어,
 		// 위 첫 비공행이 여는 `{`(빈 첫 구간) 또는 다른 라벨(빈 낙하 구간)이면 붕괴로 공행 0,
 		// 내용 행이면 공행 정확히 1 을 요구한다. 첫 비공행이 주석·전처리면 보수적으로 침묵한다.
 		// 개행 삽입·삭제는 edit 이 못 하므로 힌트 없이 [manual] 로 남긴다.
@@ -419,8 +419,8 @@ void sak::Check_hidden_brace(
 					{
 						r, r_ind, "5.6",
 						empty_section
-						? "hidden-brace rhythm: no blank line before this label (empty section)"
-						: "hidden-brace rhythm: exactly one blank line required before this label"
+						? "virtual-brace rhythm: no blank line before this label (empty section)"
+						: "virtual-brace rhythm: exactly one blank line required before this label"
 					}
 				);
 			}

@@ -135,7 +135,7 @@ namespace sak{
 		Lines const &lines, Lines const &mask, Bk_pair const &p, std::vector<Violation> &out
 	);
 
-	void Check_hidden_brace(
+	void Check_virtual_brace(
 		Lines const &lines, Lines const &mask,
 		std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 	);
@@ -157,7 +157,7 @@ namespace sak{
 	);
 	//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
-	// check_vbracket.cpp — §5.5 가상 괄호 앵커 검사들.
+	// check_cbracket.cpp — §5.5 낫괄호 앵커 검사들.
 	auto Is_inline_type_close(Lines const &mask, Bk_pair const &p)->bool;
 
 	void Check_anchor_keyword_semicolon(
@@ -175,7 +175,7 @@ namespace sak{
 
 	void Check_anchor_case(Lines const &lines, Lines const &mask, std::vector<Violation> &out);
 
-	void Check_anchor_colon_vbracket(
+	void Check_anchor_colon_cbracket(
 		Lines const &lines, Lines const &mask, std::vector<Violation> &out
 	);
 
@@ -183,7 +183,7 @@ namespace sak{
 		Lines const &lines, Lines const &mask, std::vector<Violation> &out
 	);
 
-	void Check_vbracket_blank_line(
+	void Check_cbracket_blank_line(
 		Lines const &lines, Lines const &mask, Lines const &cut_mask,
 		std::vector<Bk_pair> const &pairs, std::vector<Violation> &out
 	);

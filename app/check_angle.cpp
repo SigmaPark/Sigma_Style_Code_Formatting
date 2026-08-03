@@ -721,7 +721,7 @@ auto sak::Glued_declarator_tail(
 	return i < n && (m[i] == ';' || m[i] == ',' || m[i] == '=');
 }
 
-// §5.5 P5 — 다중행 타입의 변수 선언은 가상 괄호를 전개해야 한다. 다중행 `<...>` 의 닫는 행이
+// §5.5 P5 — 다중행 타입의 변수 선언은 낫괄호를 전개해야 한다. 다중행 `<...>` 의 닫는 행이
 // `>::사슬 <공백> 식별자 (;|,|=)` 꼴이면 위반. 좁게 — 사슬과 약식 꼬리가 정확히 맞는 자리만
 // 본다(위양성 0).
 void sak::Check_declarator_expansion(
@@ -735,7 +735,7 @@ void sak::Check_declarator_expansion(
 
 	if( i >= 0 && Glued_declarator_tail(mask[p.c_row], i, false) ){
 		out.push_back(
-			{ p.c_row, p.c_col, "5.5", "multi-line declaration must expand its virtual bracket" }
+			{ p.c_row, p.c_col, "5.5", "multi-line declaration must expand its corner bracket" }
 		);
 	}
 }
@@ -756,7 +756,7 @@ void sak::Check_declarator_expansion_brace(
 			out.push_back(
 				{
 					p.c_row, p.c_col, "5.5",
-					"multi-line declaration must expand its virtual bracket"
+					"multi-line declaration must expand its corner bracket"
 				}
 			);
 		}

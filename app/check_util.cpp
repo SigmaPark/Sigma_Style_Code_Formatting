@@ -493,7 +493,7 @@ auto sak::Is_code_char(char const ch)->bool{
 	return ch != ' ' && ch != '\t' && ch != '@';
 }
 
-// 행 r 이 숨은 중괄호의 라벨 행인가 — `case`/`default`, 또는 `:` 를 뒤에 둔 접근 지정자.
+// 행 r 이 가상 중괄호의 라벨 행인가 — `case`/`default`, 또는 `:` 를 뒤에 둔 접근 지정자.
 // 라벨 행이면 그 첫 의미 열을 head_col 에 채우고 true. (§5.6 리듬·닫힘 판정에 공유.)
 auto sak::Label_row(Lines const &mask, int const r, int &head_col)->bool{
 	if( r < 0 || r >= static_cast<int>(mask.size()) || !Has_code(mask[r]) ){

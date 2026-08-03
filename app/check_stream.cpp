@@ -24,7 +24,7 @@ namespace sak{
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
-// 차폐 구간 — 단일행 괄호(가상 괄호 포함)의 안쪽. 그 안의 토큰은 하나의 피연산 토큰에 속하므로
+// 차폐 구간 — 단일행 괄호(낫괄호 포함)의 안쪽. 그 안의 토큰은 하나의 피연산 토큰에 속하므로
 // 개행 우선순위를 갖지 않는다(§6.2).
 struct sak::Shield{
 	int row, lo, hi;
@@ -208,12 +208,12 @@ void sak::Check_break_form(std::vector<Adj_tok> const &toks, std::vector<Violati
 
 		V_cat const cat = t.suspect ? V_cat::suspect : V_cat::violation;
 
-		// `:`(상속·생성자 멤버초기화·enum 기반 타입)와 `->`(후행반환)는 §5.5 가상 괄호의 여는
-		// 키워드다. 가상 괄호가 다중행이면 그 여는 쪽은 행의 마지막에 와야 하므로(§5.4), 행 끝에
+		// `:`(상속·생성자 멤버초기화·enum 기반 타입)와 `->`(후행반환)는 §5.5 낫괄호의 여는
+		// 키워드다. 낫괄호가 다중행이면 그 여는 쪽은 행의 마지막에 와야 하므로(§5.4), 행 끝에
 		// 선 것이 곧 정본이다. 이 두 토큰의 자리는 §5.5 검사가 맡는다.
-		bool const opens_vbracket = t.text == ":" || t.text == "->";
+		bool const opens_cbracket = t.text == ":" || t.text == "->";
 
-		if(t.cls == Adj_cls::bidir && line_final && !opens_vbracket){
+		if(t.cls == Adj_cls::bidir && line_final && !opens_cbracket){
 			Violation  
 				v{
 					t.row, t.col, "9.1",
@@ -237,7 +237,7 @@ void sak::Check_break_form(std::vector<Adj_tok> const &toks, std::vector<Violati
 
 		if(
 			t.cls == Adj_cls::bidir && line_first && Is_no_space_bidir(t.text)
-			&& !opens_vbracket
+			&& !opens_cbracket
 			&& i + 1 < n && toks[i + 1].row == t.row && t.gr == 0
 		){
 			Violation  
@@ -253,7 +253,7 @@ void sak::Check_break_form(std::vector<Adj_tok> const &toks, std::vector<Violati
 	}
 }
 
-// 다중행 타입의 닫는 행에서, 타입이 끝난 지점(from) 뒤가 단일행 변수 선언 가상 괄호(선언자
+// 다중행 타입의 닫는 행에서, 타입이 끝난 지점(from) 뒤가 단일행 변수 선언 낫괄호(선언자
 // 나열 + 같은 행의 종결 `;`)이면 그 `;` 의 열을 돌려준다. 아니면 -1. 선언자 머리는 식별자와
 // `*`·`&`·`(` 만 인정하고, `;` 는 괄호 깊이 0 에서 찾는다.
 auto sak::Var_decl_close_semi(std::string const &m, int const from)->int{
@@ -296,7 +296,7 @@ auto sak::Var_decl_close_semi(std::string const &m, int const from)->int{
 	return -1;
 }
 
-// §6.2 — 단일행 괄호(실괄호·가상 괄호)의 안은 통째로 하나의 피연산 토큰이라 개행 경쟁에
+// §6.2 — 단일행 괄호(실괄호·낫괄호)의 안은 통째로 하나의 피연산 토큰이라 개행 경쟁에
 // 노출되지 않는다. 경쟁 판정이 보지 말아야 할 안쪽 구간들을 차폐면으로 모은다.
 auto sak::Build_shields(
 	Lines const &mask, std::vector<Adj_tok> const &toks,
@@ -317,7 +317,7 @@ auto sak::Build_shields(
 		}
 	}
 
-	// 변수 선언문의 단일행 가상 괄호 — 다중행 타입(인라인 타입 정의)이 끝난 `}` 뒤부터 같은
+	// 변수 선언문의 단일행 낫괄호 — 다중행 타입(인라인 타입 정의)이 끝난 `}` 뒤부터 같은
 	// 행의 종결 `;` 까지가 하나의 피연산 토큰이다. 안의 구분자·초기화자는 경쟁에 노출되지
 	// 않는다.
 	for(Bk_pair const &p : pairs){
@@ -331,7 +331,7 @@ auto sak::Build_shields(
 	}
 
 	// 다중행 꺾쇠 타입(`>::사슬`)의 변수 선언문도 동일하다 — 사슬이 끝난 지점 뒤부터 종결
-	// `;` 까지가 단일행 가상 괄호다.
+	// `;` 까지가 단일행 낫괄호다.
 	for(Angle_pair const &a : angles){
 		if(a.o_row == a.c_row){
 			continue;
@@ -350,7 +350,7 @@ auto sak::Build_shields(
 		}
 	}
 
-	// 단일행 콜론 가상 괄호 — `:` 다음부터 그 행을 닫는 `{` 까지가 하나의 피연산 토큰이다.
+	// 단일행 콜론 낫괄호 — `:` 다음부터 그 행을 닫는 `{` 까지가 하나의 피연산 토큰이다.
 	for(int i = 0; i < n; ++i){
 		if(toks[i].cls != Adj_cls::bidir || toks[i].text != ":"){
 			continue;
@@ -377,7 +377,7 @@ auto sak::Build_shields(
 // 다음 행, 다중행 괄호면 여는 행과 닫는 행, 세미콜론이면 자기 행뿐이다.
 //
 // 단일행 괄호 안은 통째로 하나의 피연산 토큰이라(§6.2) 경쟁에 노출되지 않는다 — 생성자
-// 멤버초기화 리스트·상속 리스트·변수 선언문처럼 단일행 가상 괄호를 이루는 자리도
+// 멤버초기화 리스트·상속 리스트·변수 선언문처럼 단일행 낫괄호를 이루는 자리도
 // 마찬가지다(§5.5).
 void sak::Check_break_competition(
 	Lines const &mask, std::vector<Adj_tok> const &toks,
@@ -907,8 +907,8 @@ void sak::Check_qualifier_prefix(
 
 // §5.5 · §9.3 — 마커 없이 단어에서 단어로 넘어가는 개행.
 //
-// 행이 단어로 끝나고 다음 코드 행이 단어로 시작하는 자리는, 그 사이에 가상 괄호가 열릴 때만
-// 적법하다. 그런데 가상 괄호가 열리는 자리는 모두 눈에 보인다 — `return`·`throw`·`using`·`case`
+// 행이 단어로 끝나고 다음 코드 행이 단어로 시작하는 자리는, 그 사이에 낫괄호가 열릴 때만
+// 적법하다. 그런데 낫괄호가 열리는 자리는 모두 눈에 보인다 — `return`·`throw`·`using`·`case`
 // 는 키워드고, 후행반환은 `->`, 인라인 타입은 `}`, 그리고 **변수 선언문은 2칸 마커**(§5.5,
 // v2.2.0 부터 의무)다. 그러므로 키워드도 마커도 없는 단어↔단어 개행은 **어느 해석으로도
 // 위반**이다 — 변수 선언이면 마커를 빠뜨린 것(§5.5)이고, 아니면 인접한 두 비기호형 토큰 사이에
@@ -962,7 +962,7 @@ void sak::Check_unmarked_wrap(
 			continue;
 		}
 
-		// 앞 행을 끝맺은 단어를 떠 본다 — 가상 괄호를 여는 키워드면 적법하다.
+		// 앞 행을 끝맺은 단어를 떠 본다 — 낫괄호를 여는 키워드면 적법하다.
 		std::string const last_word = Word_ending_at(a, a_end);
 		bool opener = false;
 
@@ -997,7 +997,7 @@ void sak::Check_unmarked_wrap(
 // §5.5 — 이름이 타입에 붙은 채 `=` 로 이어지는 다중행 변수 선언.
 //
 // M1(Check_unmarked_wrap)은 타입 행 다음이 **단어**로 시작하는 자리를 본다. 그 형제가 여기다 —
-// 타입과 이름이 한 행에 붙어 있고 다음 행이 **`=`** 로 시작하는 자리. 변수 선언문의 가상 괄호가
+// 타입과 이름이 한 행에 붙어 있고 다음 행이 **`=`** 로 시작하는 자리. 변수 선언문의 낫괄호가
 // 다중행이므로 타입 표현이 끝나는 행에 2칸 마커가 있어야 하고 이름은 한 단계 깊게 내려가야
 // 하는데(§5.5), 그 둘을 한 행에 붙여 두면 마커가 설 자리조차 없다.
 //
@@ -1162,7 +1162,7 @@ auto sak::Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bool
 // §9.1 인접 문자열 리터럴 — 두 리터럴 사이의 개행은 다중행 괄호 안에서만 허용된다.
 // 토큰 스트림에서 연속한 두 일반 문자열 리터럴이 정확히 한 행 차이로 이어질 때, 이 자리를
 // 엄격히 포함하는 표현 괄호(`(`·`[`·`[[`·꺾쇠·초기화류 `{`)가 하나도 없으면 위반. 문장 스코프의
-// `{`(Brace_opens_statement_scope)는 면허가 아니다. 가상 괄호(『)는 pairs 에 없으므로, 문장
+// `{`(Brace_opens_statement_scope)는 면허가 아니다. 낫괄호(『)는 pairs 에 없으므로, 문장
 // 머리까지 거슬러 올라 그 흔적 — 여는 키워드(return 등)·변수 선언문의 2칸 마커 — 이 보이면
 // 보수적으로 침묵한다. 원시 문자열·문자 리터럴·사이에 주석·공행이 낀 자리도 침묵(sak_coverage).
 // 접합 자리의 우선순위는 Prio::str_adj(§6.1 ◆) — §9.2 경쟁 통합은 커버리지 밖.
@@ -1269,7 +1269,7 @@ void sak::Check_string_splice_newline(
 			continue;
 		}
 
-		// 문장 머리까지 거슬러 가상 괄호의 흔적을 찾는다 — 있으면 침묵(『 는 pairs 밖이다).
+		// 문장 머리까지 거슬러 낫괄호의 흔적을 찾는다 — 있으면 침묵(『 는 pairs 밖이다).
 		bool virtual_trace = false;
 		int stmt_lo = a.row;
 

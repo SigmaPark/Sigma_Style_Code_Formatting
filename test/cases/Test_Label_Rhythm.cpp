@@ -11,7 +11,7 @@
 
 static auto Intro()->void{
 	h2u::mdo
-	<< h2u::Title(L"Rule 5.6 - Hidden-brace label rhythm")
+	<< h2u::Title(L"Rule 5.6 - Virtual-brace label rhythm")
 	<< L"Inside a `switch` or a class body, exactly one blank line precedes each label (and none "
 	<< L"before the first). `sak` flags a missing or a spurious blank around a label."
 	<< h2u::empty_line;

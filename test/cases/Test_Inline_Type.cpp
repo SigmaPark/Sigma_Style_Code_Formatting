@@ -12,7 +12,7 @@
 static auto Intro()->void{
 	h2u::mdo
 	<< h2u::Title(L"Rule 5.5 - Inline types and buried declarators")
-	<< L"An inline type definition or a buried declarator that spans lines must expand its virtual "
+	<< L"An inline type definition or a buried declarator that spans lines must expand its corner "
 	<< L"bracket (type alone with the marker, declarators one level deeper). `sak` flags the glue."
 	<< h2u::empty_line;
 }
@@ -113,7 +113,7 @@ static auto Inline_single_bad()->void{
 	H2U_ASSERT( sakt::matches(got, want) );
 }
 
-static auto Vbracket_shield_ok()->void{
+static auto Cbracket_shield_ok()->void{
 	Lines const  
 		snippet
 		= {
@@ -175,6 +175,6 @@ H2U_HOW2USE_TESTS(sakt::Test_, Inline_Type, /**/){
 	::Declarator_call_ok,
 	::Inline_list_bad,
 	::Inline_single_bad,
-	::Vbracket_shield_ok,
+	::Cbracket_shield_ok,
 	::Angle_decl_glued_bad
 };
