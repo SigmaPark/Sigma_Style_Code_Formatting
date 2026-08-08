@@ -19,8 +19,6 @@ namespace sak{
 		Lines const &mask, std::vector<Adj_tok> const &toks,
 		std::vector<Bk_pair> const &pairs, std::vector<Angle_pair> const &angles
 	)->std::vector<Shield>;
-
-	static auto Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bool;
 }
 //--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$//--//--//--//--//-$
 
@@ -631,7 +629,7 @@ void sak::Check_word_paren_vop(
 					crossed
 					? "newline after single-line ')' before a word — blank lines do not license it"
 					: "newline after single-line ')' before a word: cohere it,"
-					" or it is a statement macro",
+					"" " or it is a statement macro",
 					Fix_kind::none, 0, 0, V_cat::suspect
 				}
 			);
@@ -986,7 +984,8 @@ void sak::Check_unmarked_wrap(
 				r, a_end, "5.5",
 				std::string(
 					"word wraps to word without the two-space marker: a variable declaration is"
-					" missing its marker (5.5), or two adjacent tokens are split by a newline (9.3)"
+					"" " missing its marker (5.5), or two adjacent tokens are split by a newline"
+					"" " (9.3)"
 				)
 				+ (crossed ? " — blank lines do not license the split" : "")
 			}
@@ -1110,76 +1109,34 @@ void sak::Check_glued_declarator(
 			{
 				name.row, name.col, "5.5",
 				"multi-line variable declaration: the declarator is glued to its type."
-				" Put the type alone on its line with the two-space marker, the declarator"
-				" one level deeper, and the closing ';' on its own line"
+				"" " Put the type alone on its line with the two-space marker, the declarator"
+				"" " one level deeper, and the closing ';' on its own line"
 			}
 		);
 	}
 }
 
-// 감싸는 `{` 쌍이 문장·선언의 스코프(함수·제어문·람다 본체, namespace, 클래스 본체, extern
-// 링키지 블록)인지 — 그 안의 행들은 괄호의 이음줄이 아니라 문장들이라, 인접 문자열 리터럴의
-// 개행을 면허하는 "다중행 괄호 안"이 아니다. 판정이 서지 않는 여는 자리(중괄호 초기화 `Foo{`,
-// `]`·`>` 뒤 등)는 false 로 두어 보수적으로 면허한다(위양성 0 우선 — 거짓 음성 수용).
-auto sak::Brace_opens_statement_scope(Lines const &mask, Bk_pair const &p)->bool{
-	int r = p.o_row, c = p.o_col - 1;
-
-	if( !Prev_significant(mask, r, c) ){
-		return true; // 파일 첫머리의 나체 블록
-	}
-
-	char const ch = mask[r][c];
-
-	if(ch == ')'){
-		return true; // 함수·제어문·람다 본체
-	}
-
-	if( !is_word_char(ch) ){
-		return false; // `=`·`,`·`(`·`>`·`:`·`]` 등 — 초기화·표현식 문맥으로 보수 분류
-	}
-
-	std::string const w = Word_ending_at(mask[r], c);
-	int const s = c - static_cast<int>(w.size());
-
-	bool const  
-		scope_kw
-		= w == "do" || w == "else" || w == "try" || w == "namespace" || w == "extern"
-		|| w == "struct" || w == "class" || w == "union" || w == "enum"
-	;
-
-	if(scope_kw){
-		return true;
-	}
-
-	std::string const before = Word_before(mask, r, s + 1);
-
-	return
-		before == "struct" || before == "class" || before == "union" || before == "enum"
-		|| before == "namespace"
-	;
-}
-
-// §9.1 인접 문자열 리터럴 — 두 리터럴 사이의 개행은 다중행 괄호 안에서만 허용된다.
-// 토큰 스트림에서 연속한 두 일반 문자열 리터럴이 정확히 한 행 차이로 이어질 때, 이 자리를
-// 엄격히 포함하는 표현 괄호(`(`·`[`·`[[`·꺾쇠·초기화류 `{`)가 하나도 없으면 위반. 문장 스코프의
-// `{`(Brace_opens_statement_scope)는 면허가 아니다. 낫괄호(『)는 pairs 에 없으므로, 문장
-// 머리까지 거슬러 올라 그 흔적 — 여는 키워드(return 등)·변수 선언문의 2칸 마커 — 이 보이면
-// 보수적으로 침묵한다. 원시 문자열·문자 리터럴·사이에 주석·공행이 낀 자리도 침묵(sak_coverage).
-// 접합 자리의 우선순위는 Prio::str_adj(§6.1 ◆) — §9.2 경쟁 통합은 커버리지 밖.
-void sak::Check_string_splice_newline(
-	Lines const &mask, Lines const &cut_lines, Seg_lines const &segs,
-	std::vector<Adj_tok> const &toks, std::vector<Bk_pair> const &pairs,
-	std::vector<Angle_pair> const &angles, std::vector<Violation> &out
+// §4.4 문자열 리터럴 접합자 — 인접한 두 문자열 리터럴 사이의 이음을 본다. 이음이 행을 넘으면
+// 이어지는 행이 무접두 빈 문자열의 몸으로 시작해야 하고(§9.1 의 개행은 이끌 몸을 요구한다),
+// 한 행 안의 이음에는 그 몸이 서지 않아야 한다(단일행 상태에서는 적지 않는다). 접두사가 붙은
+// 몸(L""·u8"")은 이웃의 인코딩을 덮어쓰므로 접합자가 아니다. 원시 문자열은 한 리터럴이 행마다
+// 세그먼트로 갈려 접합과 구별되지 않고, 두 리터럴 사이에 빈 행 아닌 행이 끼면 접합이 아닐 수
+// 있어 그 자리에서는 침묵한다.
+void sak::Check_string_splicer(
+	Lines const &lines, Seg_lines const &segs,
+	std::vector<Adj_tok> const &toks, std::vector<Violation> &out
 ){
 	auto const  
 		is_plain_string
-		= [&segs](int const row, int const col)->bool{
-			if( row >= static_cast<int>(segs.size()) ){
+		= [&segs, &toks](int const i)->bool{
+			Adj_tok const &t = toks[i];
+
+			if( t.cls != Adj_cls::lit || t.row >= static_cast<int>(segs.size()) ){
 				return false;
 			}
 
-			for(Segment const &s : segs[row]){
-				if(s.col == col){
+			for(Segment const &s : segs[t.row]){
+				if(s.col == t.col){
 					return s.kind == Seg_kind::string_lit;
 				}
 			}
@@ -1188,16 +1145,22 @@ void sak::Check_string_splice_newline(
 		}
 	;
 
+	// 접두사 붙은 빈 문자열(L""·u8"") — 몸으로 인정되지 않으므로 누락과 갈라 짚어 준다.
+	// 세그먼트 안 첫 따옴표 앞에 접두사가 있고, 그 따옴표부터 끝까지가 딱 두 글자인 자리다.
 	auto const  
-		has_comment
-		= [&segs](int const row, int const col, bool const after)->bool{
-			if( row >= static_cast<int>(segs.size()) ){
+		is_prefixed_empty
+		= [&lines](Adj_tok const &t)->bool{
+			if( t.row >= static_cast<int>(lines.size()) ){
 				return false;
 			}
 
-			for(Segment const &s : segs[row]){
-				if( s.kind == Seg_kind::comment && (after ? s.col > col : s.col < col) ){
-					return true;
+			std::string const &m = lines[t.row];
+			int const cols = static_cast<int>(m.size());
+			int const end = t.col + t.len;
+
+			for(int i = t.col; i < end && i < cols; ++i){
+				if(m[i] == '"'){
+					return i > t.col && end - i == 2;
 				}
 			}
 
@@ -1205,123 +1168,71 @@ void sak::Check_string_splice_newline(
 		}
 	;
 
+	// 두 리터럴 사이에 빈 행만 있는가 — 코드·주석·전처리 행이 끼면 접합이 아닐 수 있어 물러선다.
 	auto const  
-		has_marker_tail
-		= [&cut_lines](int const row)->bool{
-			if( row < 0 || row >= static_cast<int>(cut_lines.size()) ){
-				return false;
+		gap_is_blank
+		= [&lines](int const from, int const to)->bool{
+			int const rows = static_cast<int>(lines.size());
+
+			for(int r = from + 1; r < to && r < rows; ++r){
+				if( !Is_blank_row(lines[r]) ){
+					return false;
+				}
 			}
 
-			return Tail_spaces(cut_lines[row]) == 2;
+			return true;
 		}
 	;
 
 	int const n = static_cast<int>(toks.size());
 
-	for(int i = 0; i + 1 < n; ++i){
-		Adj_tok const &a = toks[i];
-		Adj_tok const &b = toks[i + 1];
-
-		bool const  
-			splice
-			= a.cls == Adj_cls::lit && b.cls == Adj_cls::lit && b.row == a.row + 1
-			&& is_plain_string(a.row, a.col) && is_plain_string(b.row, b.col)
-			&& !has_comment(a.row, a.col, true) && !has_comment(b.row, b.col, false)
-		;
-
-		if(!splice){
+	// 세그먼트는 인코딩 접두사에서 열리므로(lexer), 무접두 빈 문자열의 몸은 길이 정확히 2다.
+	// L""·u8"" 는 길이가 늘어 몸으로 인정되지 않는다.
+	for(int k = 0; k + 1 < n; ++k){
+		if( !is_plain_string(k) || !is_plain_string(k + 1) ){
 			continue;
 		}
 
-		bool licensed = false;
+		Adj_tok const &a = toks[k];
+		Adj_tok const &b = toks[k + 1];
+		bool const has_right = k + 2 < n && is_plain_string(k + 2);
 
-		for(Bk_pair const &p : pairs){
-			bool const  
-				contains
-				= ( p.o_row < a.row || (p.o_row == a.row && p.o_col < a.col) )
-				&& ( p.c_row > b.row || (p.c_row == b.row && p.c_col > b.col + b.len - 1) )
-			;
-
-			if(  contains && ( p.kind != '{' || !Brace_opens_statement_scope(mask, p) )  ){
-				licensed = true;
-
-				break;
-			}
-		}
-
-		for(Angle_pair const &g : angles){
-			if(licensed){
-				break;
+		if(a.row == b.row){
+			if(b.len == 2 && has_right){
+				out.push_back(
+					{
+						b.row, b.col, "4.4",
+						"string literal splicer stands only in a multi-line state"
+					}
+				);
 			}
 
-			bool const  
-				contains
-				= ( g.o_row < a.row || (g.o_row == a.row && g.o_col < a.col) )
-				&& ( g.c_row > b.row || (g.c_row == b.row && g.c_col > b.col + b.len - 1) )
-			;
-
-			if(contains){
-				licensed = true;
-			}
-		}
-
-		if(licensed){
 			continue;
 		}
 
-		// 문장 머리까지 거슬러 낫괄호의 흔적을 찾는다 — 있으면 침묵(『 는 pairs 밖이다).
-		bool virtual_trace = false;
-		int stmt_lo = a.row;
-
-		for(int j = i - 1; j >= 0 && i - j < 400; --j){
-			Adj_tok const &t = toks[j];
-
-			bool const  
-				boundary
-				= t.cls == Adj_cls::semi
-				|| (
-					(t.cls == Adj_cls::open_b || t.cls == Adj_cls::close_b)
-					&& (t.text == "{" || t.text == "}")
-				)
-			;
-
-			if(boundary){
-				break;
-			}
-
-			stmt_lo = t.row;
-
-			bool const  
-				opener
-				= t.cls == Adj_cls::word
-				&& (
-					t.text == "return" || t.text == "throw" || t.text == "using"
-					|| t.text == "case" || t.text == "co_return" || t.text == "co_yield"
-				)
-			;
-
-			if(opener){
-				virtual_trace = true;
-
-				break;
-			}
-		}
-
-		for(int r = stmt_lo; !virtual_trace && r <= a.row; ++r){
-			virtual_trace = has_marker_tail(r);
-		}
-
-		if(virtual_trace){
+		if( !gap_is_blank(a.row, b.row) ){
 			continue;
 		}
 
-		out.push_back(
-			{
-				b.row, b.col, "9.1",
-				"adjacent string literals: the newline between them is allowed only"
-				" inside a multi-line bracket — wrap them in parentheses"
-			}
-		);
+		if( is_prefixed_empty(b) ){
+			out.push_back(
+				{ b.row, b.col, "4.4", "string literal splicer must be unprefixed" }
+			);
+		}
+		else if(b.len != 2){
+			out.push_back(
+				{
+					b.row, b.col, "9.1",
+					"adjacent string literals broken across lines: lead the continuation line"
+					"" " with the splicer"
+				}
+			);
+		}
+		else if(!has_right){
+			out.push_back(
+				{ b.row, b.col, "4.4", "string literal splicer joins nothing on its right" }
+			);
+		}
 	}
 }
 

@@ -264,10 +264,9 @@ namespace sak{
 		std::vector<Violation> &out
 	);
 
-	void Check_string_splice_newline(
-		Lines const &mask, Lines const &cut_lines, Seg_lines const &segs,
-		std::vector<Adj_tok> const &toks, std::vector<Bk_pair> const &pairs,
-		std::vector<Angle_pair> const &angles, std::vector<Violation> &out
+	void Check_string_splicer(
+		Lines const &lines, Seg_lines const &segs,
+		std::vector<Adj_tok> const &toks, std::vector<Violation> &out
 	);
 
 	void Check_brace_paren_newline(

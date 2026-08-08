@@ -118,7 +118,7 @@ auto sak::check_lines(
 	Check_qualifier_prefix(toks, pass2);
 	Check_unmarked_wrap(lines, cut_lines, cut_mask, pass2);
 	Check_glued_declarator(cut_lines, toks, pairs, angles, pass2);
-	Check_string_splice_newline(mask, cut_lines, segs, toks, pairs, angles, pass2);
+	Check_string_splicer(lines, segs, toks, pass2);
 	Check_brace_paren_newline(lines, mask, pass2);
 	Check_suspects(toks, pass2);
 

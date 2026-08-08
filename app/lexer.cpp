@@ -18,6 +18,7 @@ namespace sak{
 	static auto is_digit_sep(std::string const &line, int const i)->bool;
 	static auto Word_start(std::string const &line, int const quote)->int;
 	static auto is_raw_prefix(std::string const &line, int const quote)->bool;
+	static auto Literal_start(std::string const &line, int const quote)->int;
 	static auto raw_closes_at(std::string const &line, int const i, std::string const &delim)->bool;
 	static auto is_preproc_line(std::string const &line)->bool;
 
@@ -79,6 +80,17 @@ auto sak::is_raw_prefix(std::string const &line, int const quote)->bool{
 	std::string const pfx = line.substr(start, quote - start);
 
 	return pfx == "R" || pfx == "LR" || pfx == "uR" || pfx == "UR" || pfx == "u8R";
+}
+
+// 인코딩 접두사(L/u/U/u8)는 리터럴 토큰의 일부다(§4 — 토큰 경계는 언어의 것). 그러니 세그먼트도
+// 따옴표가 아니라 접두사에서 연다 — raw 문자열이 이미 그렇게 열리는 것과 같다. 접두사가 없으면
+// 따옴표 자리를 그대로 돌려준다.
+auto sak::Literal_start(std::string const &line, int const quote)->int{
+	int const start = Word_start(line, quote);
+	std::string const pfx = line.substr(start, quote - start);
+	bool const enc = pfx == "L" || pfx == "u" || pfx == "U" || pfx == "u8";
+
+	return enc ? start : quote;
 }
 
 // 위치 i 의 ')' 에서 raw 문자열이 )delim" 로 닫히는지.
@@ -205,16 +217,20 @@ auto sak::Scan_one_line(
 				}
 			}
 			else if(c == '"'){
-				flush(i);
+				int const head = Literal_start(line, i);
+
+				flush(head);
 				kind = Seg_kind::string_lit;
-				seg_start = i;
+				seg_start = head;
 				mode = Mode::string_lit;
 				i += 1;
 			}
 			else if( c == '\'' && !is_digit_sep(line, i) ){
-				flush(i);
+				int const head = Literal_start(line, i);
+
+				flush(head);
 				kind = Seg_kind::char_lit;
-				seg_start = i;
+				seg_start = head;
 				mode = Mode::char_lit;
 				i += 1;
 			}
